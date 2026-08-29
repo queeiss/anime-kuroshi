@@ -3415,6 +3415,121 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   window.addEventListener('load',()=>setTimeout(()=>window.k24Ensure(),300));
 })();
 </script>
+
+<script>
+/* KUROSHI v25 — inject catalog manager into the actual in-profile admin view */
+(function(){
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const qstr=v=>String(v??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+  async function adminOK(){
+    try{
+      const {data,error}=await window.sb.rpc('is_admin');
+      return !error && data===true;
+    }catch(e){ return false; }
+  }
+
+  function ensureManager(){
+    const root=document.querySelector('#profile-modal.k-admin-open .profile-content');
+    if(!root || root.querySelector('#k25-manager')) return root?.querySelector('#k25-manager')||null;
+
+    const manager=document.createElement('div');
+    manager.id='k25-manager';
+    manager.innerHTML=`
+      <div style="margin:0 0 18px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--surface)">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+          <strong style="font-size:16px">Все опубликованные аниме</strong>
+          <input id="k25-search" placeholder="Поиск по названию..."
+            style="min-width:220px;flex:1;max-width:360px;background:var(--surface-2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:10px;font:inherit"
+            oninput="k25LoadList()">
+        </div>
+        <div id="k25-status" style="font-size:12px;color:var(--text-faint);margin-bottom:10px">Проверяем каталог…</div>
+        <div id="k25-list" style="display:grid;gap:9px;max-height:460px;overflow:auto"></div>
+      </div>`;
+
+    const title=root.querySelector('.k12-title,.k12-sub');
+    const shell=root.querySelector('.k12-admin-shell') || root;
+    const target=shell.querySelector('.k10-admin-tabs') || shell.firstElementChild;
+    shell.insertBefore(manager, target || shell.firstChild);
+    return manager;
+  }
+
+  window.k25LoadList=async function(){
+    const box=document.getElementById('k25-list'), status=document.getElementById('k25-status');
+    if(!box||!status)return;
+    status.textContent='Загрузка каталога…';
+    box.innerHTML='';
+    if(!(await adminOK())){status.textContent='Нет доступа';return}
+
+    const {data,error}=await sb.from('anime')
+      .select('id,title,genre,year,status,poster,rating,total_episodes,created_at,updated_at')
+      .order('updated_at',{ascending:false});
+
+    if(error){
+      status.textContent='Ошибка Supabase: '+error.message;
+      box.innerHTML='<div style="padding:20px;text-align:center;color:var(--text-faint)">Не удалось загрузить каталог.</div>';
+      return;
+    }
+
+    const q=(document.getElementById('k25-search')?.value||'').trim().toLowerCase();
+    const rows=(data||[]).filter(x=>!q||String(x.title||'').toLowerCase().includes(q));
+    status.textContent=`В базе найдено: ${rows.length} аниме`;
+
+    if(!rows.length){
+      box.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-faint);border:1px dashed var(--line);border-radius:10px">В таблице <b>anime</b> пока нет опубликованных аниме.</div>';
+      return;
+    }
+
+    box.innerHTML=rows.map(x=>`
+      <div data-k25-row="${qstr(x.id)}"
+        style="display:grid;grid-template-columns:64px 1fr auto;gap:12px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2)">
+        ${x.poster?`<img src="${esc(x.poster)}" referrerpolicy="no-referrer" style="width:64px;height:86px;object-fit:cover;border-radius:8px;background:var(--surface)" alt="">`
+                   :'<div style="width:64px;height:86px;border-radius:8px;background:var(--surface)"></div>'}
+        <div>
+          <strong style="display:block;font-size:13px">${esc(x.title)}</strong>
+          <small style="display:block;color:var(--text-faint);margin-top:4px">ID: ${esc(x.id)}</small>
+          <small style="display:block;color:var(--text-faint);margin-top:3px">${esc(x.genre||'')} · ${esc(x.year||'')} · ${esc(x.status||'')}</small>
+          <small style="display:block;color:var(--text-faint);margin-top:3px">★ ${Number(x.rating||0).toFixed(1)} · ${Number(x.total_episodes||0)} серий</small>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">
+          <button class="anime-action" onclick="k25Edit('${qstr(x.id)}')">Изменить</button>
+          <button class="anime-action" style="color:#ff8a98;border-color:rgba(255,80,100,.35)" onclick="k25Delete('${qstr(x.id)}')">Удалить</button>
+        </div>
+      </div>`).join('');
+  };
+
+  window.k25Edit=async function(id){
+    const {data,error}=await sb.from('anime').select('*').eq('id',id).maybeSingle();
+    if(error||!data){showToast(error?.message||'Аниме не найдено');return}
+    const set=(id,v)=>{const e=document.getElementById(id);if(e)e.value=v??''};
+    set('admin-anime-id',data.id);set('admin-anime-title',data.title);set('admin-anime-genre',data.genre);
+    set('admin-anime-year',data.year);set('admin-anime-status',data.status);set('admin-anime-poster',data.poster);
+    set('admin-anime-description',data.description);set('admin-anime-rating',0);
+    showToast('Аниме загружено в форму редактирования');
+    document.getElementById('admin-anime-title')?.focus();
+  };
+
+  window.k25Delete=async function(id){
+    if(!(await adminOK()))return showToast('Нет доступа');
+    const {data}=await sb.from('anime').select('title').eq('id',id).maybeSingle();
+    if(!confirm(`Удалить «${data?.title||id}» из каталога?`))return;
+    const {error}=await sb.from('anime').delete().eq('id',id);
+    if(error){showToast('Ошибка: '+error.message);return}
+    await k25LoadList();
+    if(window.refreshKuroshiCatalog)await window.refreshKuroshiCatalog();
+    showToast('Аниме удалено ✓');
+  };
+
+  const prevOpenAdmin=window.openAdmin;
+  window.openAdmin=async function(){
+    if(prevOpenAdmin) await prevOpenAdmin();
+    setTimeout(async()=>{
+      const manager=ensureManager();
+      if(manager) await k25LoadList();
+    },80);
+  };
+})();
+</script>
 </body>
 
 <script>
