@@ -751,6 +751,22 @@
 html[data-theme="mono"] .k16-me-badge{color:#000}
 .user-row.k16-me{border-color:var(--violet);box-shadow:0 0 0 1px var(--violet)}
 </style>
+
+<style>
+.k18-news-list{display:grid;gap:18px}
+.k18-news-card{
+  background:var(--surface);border:1px solid var(--line);border-radius:16px;
+  overflow:hidden;transition:transform .2s,border-color .2s;
+}
+.k18-news-card:hover{transform:translateY(-2px);border-color:var(--violet)}
+.k18-news-image{width:100%;max-height:320px;object-fit:cover;display:block;background:var(--surface-2)}
+.k18-news-body{padding:20px}
+.k18-news-body h2{font-size:21px;margin-bottom:8px}
+.k18-news-meta{font-size:11px;color:var(--text-faint);margin-bottom:12px}
+.k18-news-text{font-size:13.5px;line-height:1.7;color:var(--text-dim);white-space:pre-wrap}
+.k18-news-empty{text-align:center;padding:60px 20px;color:var(--text-faint);background:var(--surface);border:1px dashed var(--line);border-radius:14px}
+@media(max-width:700px){.k18-news-body{padding:15px}.k18-news-body h2{font-size:18px}}
+</style>
 </head>
 <body>
 
@@ -764,8 +780,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       <button class="active" data-nav="home" onclick="showPage('home')">Главная</button>
       <button data-nav="catalog" onclick="showPage('catalog')">Каталог</button>
       <button data-nav="users" onclick="showPage('users')">Пользователи</button>
-      <button data-nav="schedule" onclick="showToast('Расписание выхода скоро появится')">Расписание выхода</button>
-      <button data-nav="fav" onclick="openLibraryTab('favorites')">Избранное</button>
+      <button data-nav="news" onclick="showPage('news')">Новости</button>
     </div>
     <div class="nav-right">
       <div class="search">
@@ -897,6 +912,19 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       <div class="grid" id="catalog-grid"></div>
     </section>
   </div>
+  <!-- ================= NEWS PAGE ================= -->
+  <div id="page-news" class="hidden">
+    <div class="catalog-head">
+      <h1>Новости KUROSHI</h1>
+      <p>Новости, обновления сайта и объявления от команды KUROSHI.</p>
+    </div>
+    <section style="padding-top:24px;">
+      <div id="news-list" class="k18-news-list">
+        <div class="k18-news-empty">Загрузка новостей…</div>
+      </div>
+    </section>
+  </div>
+
   <!-- ================= PROFILE PAGE ================= -->
   <div id="page-profile" class="hidden">
     <section class="profile-page">
@@ -1270,6 +1298,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   function showPage(page){
     document.getElementById('page-home').classList.toggle('hidden', page!=='home');
     document.getElementById('page-catalog').classList.toggle('hidden', page!=='catalog');
+    document.getElementById('page-news').classList.toggle('hidden', page!=='news');
     document.getElementById('page-users').classList.toggle('hidden', page!=='users');
     document.querySelectorAll('.nav-links button').forEach(b=>b.classList.remove('active'));
     const btn = document.querySelector(`.nav-links button[data-nav="${page}"]`);
@@ -1277,6 +1306,36 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     window.scrollTo({top:0, behavior:'smooth'});
     if(page==='catalog') renderCatalogGrid();
     if(page==='users') renderUsers();
+    if(page==='news') renderNews();
+  }
+
+  /* ===================== NEWS ===================== */
+  async function renderNews(){
+    const box=document.getElementById('news-list');
+    if(!box) return;
+    box.innerHTML='<div class="k18-news-empty">Загрузка новостей…</div>';
+    try{
+      const {data,error}=await sb.from('news')
+        .select('id,title,body,image,published_at,created_at')
+        .order('published_at',{ascending:false});
+      if(error) throw error;
+      if(!data?.length){
+        box.innerHTML='<div class="k18-news-empty">Новостей пока нет.</div>';
+        return;
+      }
+      box.innerHTML=data.map(n=>{
+        const img=n.image ? `<img class="k18-news-image" src="${escapeHtml(n.image)}" alt="">` : '';
+        const d=new Date(n.published_at||n.created_at).toLocaleDateString('ru-RU',{day:'2-digit',month:'long',year:'numeric'});
+        return `<article class="k18-news-card">${img}<div class="k18-news-body">
+          <div class="k18-news-meta">${d}</div>
+          <h2>${escapeHtml(n.title)}</h2>
+          <div class="k18-news-text">${escapeHtml(n.body||'')}</div>
+        </div></article>`;
+      }).join('');
+    }catch(e){
+      console.error('News error:',e);
+      box.innerHTML='<div class="k18-news-empty">Не удалось загрузить новости.</div>';
+    }
   }
 
   /* ===================== AUTH ===================== */
