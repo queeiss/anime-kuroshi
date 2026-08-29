@@ -590,6 +590,26 @@
 }
 </style>
 
+
+<style>
+.k-notify{position:relative;display:flex;align-items:center;justify-content:center;width:38px;height:38px;border:1px solid var(--line);background:var(--surface);color:var(--text-dim);border-radius:10px;cursor:pointer}
+.k-notify svg{width:18px;height:18px}
+.k-notify-badge{position:absolute;top:-4px;right:-4px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:var(--magenta);color:#fff;font-size:10px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.k-admin-btn{margin-top:12px}
+.admin-modal .modal{max-width:900px;padding:28px}
+.admin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+.admin-card{background:var(--surface-2);border:1px solid var(--line);border-radius:12px;padding:16px}
+.admin-card h3{margin:0 0 12px;font-size:15px}
+.admin-card textarea,.admin-card input,.admin-card select{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:9px;color:var(--text);padding:10px;margin-top:6px;font:inherit}
+.admin-row{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+.admin-list{max-height:240px;overflow:auto;margin-top:10px}
+.admin-list-item{display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);font-size:12px}
+.notify-modal .modal{max-width:520px;padding:26px}
+.notify-item{padding:12px;border-bottom:1px solid var(--line)}
+.notify-item.unread{background:var(--surface-2)}
+.notify-item small{display:block;color:var(--text-faint);margin-top:4px}
+@media(max-width:700px){.admin-grid{grid-template-columns:1fr}.k-notify{width:34px;height:34px}}
+</style>
 </head>
 <body>
 
@@ -622,7 +642,13 @@
           <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 0 0 0 20z"/><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/></svg>
         </button>
       </div>
-      <div class="auth-buttons" id="auth-buttons">
+      <button class="k-notify" id="k-notify-btn" title="Уведомления" onclick="openNotifications()">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path>
+  </svg>
+  <span class="k-notify-badge hidden" id="k-notify-badge">0</span>
+</button>
+<div class="auth-buttons" id="auth-buttons">
         <button class="btn-login" onclick="openAuthModal('login')">Войти</button>
         <button class="btn-signup" onclick="openAuthModal('register')">Регистрация</button>
       </div>
@@ -903,6 +929,62 @@
       <div class="field"><label>Instagram</label><input id="social-instagram" type="url" placeholder="https://instagram.com/..."></div>
       <button class="auth-submit">Сохранить изменения</button>
     </form>
+  </div>
+</div>
+
+
+<div class="overlay hidden notify-modal" id="notifications-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeNotifications()">✕</button>
+    <div class="filter-title">Уведомления</div>
+    <div id="notifications-list"><p style="color:var(--text-faint)">Загрузка...</p></div>
+    <button class="btn-ghost" style="margin-top:14px" onclick="markNotificationsRead()">Отметить всё прочитанным</button>
+  </div>
+</div>
+
+<div class="overlay hidden admin-modal" id="admin-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeAdmin()">✕</button>
+    <div class="filter-title">Админ-панель KUROSHI</div>
+    <p style="color:var(--text-faint);font-size:12px;margin-bottom:18px">Управление каталогом, сериями и новостями.</p>
+    <div id="admin-status"></div>
+    <div class="admin-grid">
+      <div class="admin-card">
+        <h3>🎬 Аниме</h3>
+        <input id="admin-anime-id" placeholder="ID, например midnight-blade">
+        <input id="admin-anime-title" placeholder="Название">
+        <input id="admin-anime-genre" placeholder="Жанр">
+        <input id="admin-anime-year" type="number" placeholder="Год">
+        <input id="admin-anime-status" placeholder="Статус">
+        <input id="admin-anime-rating" type="number" min="0" max="10" step=".1" placeholder="Рейтинг">
+        <input id="admin-anime-poster" placeholder="URL постера">
+        <textarea id="admin-anime-description" placeholder="Описание"></textarea>
+        <div class="admin-row"><button class="btn-primary" onclick="adminSaveAnime()">Сохранить</button></div>
+      </div>
+      <div class="admin-card">
+        <h3>📺 Серия</h3>
+        <input id="admin-ep-anime" placeholder="ID аниме">
+        <input id="admin-ep-number" type="number" placeholder="Номер серии">
+        <input id="admin-ep-title" placeholder="Название серии">
+        <input id="admin-ep-video" placeholder="URL видео">
+        <div class="admin-row"><button class="btn-primary" onclick="adminSaveEpisode()">Добавить серию</button></div>
+      </div>
+      <div class="admin-card">
+        <h3>📰 Новость</h3>
+        <input id="admin-news-title" placeholder="Заголовок">
+        <input id="admin-news-image" placeholder="URL изображения">
+        <textarea id="admin-news-body" placeholder="Текст новости"></textarea>
+        <div class="admin-row"><button class="btn-primary" onclick="adminSaveNews()">Опубликовать</button></div>
+      </div>
+      <div class="admin-card">
+        <h3>🔔 Уведомление пользователю</h3>
+        <input id="admin-notify-user" placeholder="UUID пользователя">
+        <input id="admin-notify-title" placeholder="Заголовок">
+        <input id="admin-notify-body" placeholder="Текст">
+        <input id="admin-notify-link" placeholder="Ссылка">
+        <div class="admin-row"><button class="btn-primary" onclick="adminSendNotification()">Отправить</button></div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2022,5 +2104,146 @@
 })();
 </script>
 
+
+<script>
+/* KUROSHI v7 — notifications + admin panel */
+(function(){
+  async function me(){ const {data:{user}}=await window.sb.auth.getUser(); return user; }
+
+  async function loadUnread(){
+    try{
+      const u=await me(); if(!u)return;
+      const {data,error}=await window.sb.from('notifications').select('id,title,body,link,created_at')
+        .eq('user_id',u.id).eq('is_read',false).order('created_at',{ascending:false});
+      if(error) throw error;
+      const b=document.getElementById('k-notify-badge');
+      b.textContent=(data||[]).length;
+      b.classList.toggle('hidden',!(data||[]).length);
+    }catch(e){console.error('notifications',e)}
+  }
+
+  window.openNotifications=async function(){
+    const modal=document.getElementById('notifications-modal');
+    modal.classList.remove('hidden');
+    const box=document.getElementById('notifications-list');
+    box.innerHTML='<p style="color:var(--text-faint)">Загрузка...</p>';
+    try{
+      const u=await me();
+      if(!u){box.innerHTML='<p>Войдите в аккаунт, чтобы видеть уведомления.</p>';return;}
+      const {data,error}=await window.sb.from('notifications').select('*').eq('user_id',u.id)
+        .order('created_at',{ascending:false}).limit(30);
+      if(error)throw error;
+      if(!data?.length){box.innerHTML='<p style="color:var(--text-faint)">Уведомлений пока нет.</p>';return;}
+      box.innerHTML=data.map(n=>`<div class="notify-item ${n.is_read?'':'unread'}">
+        <strong>${esc(n.title)}</strong><div>${esc(n.body||'')}</div>
+        <small>${new Date(n.created_at).toLocaleString('ru-RU')}</small>
+      </div>`).join('');
+    }catch(e){box.innerHTML='<p>Не удалось загрузить уведомления.</p>';console.error(e)}
+  };
+  window.closeNotifications=()=>document.getElementById('notifications-modal').classList.add('hidden');
+
+  window.markNotificationsRead=async function(){
+    const u=await me();if(!u)return;
+    await window.sb.from('notifications').update({is_read:true}).eq('user_id',u.id);
+    await loadUnread(); await openNotifications();
+  };
+
+  async function isAdmin(){
+    const u=await me(); if(!u)return false;
+    const {data,error}=await window.sb.rpc('is_admin');
+    if(error){console.error('admin check',error);return false}
+    return !!data;
+  }
+
+  window.openAdmin=async function(){
+    if(!(await isAdmin())){showToast('Нет доступа к админ-панели');return;}
+    document.getElementById('admin-modal').classList.remove('hidden');
+    document.getElementById('admin-status').innerHTML='<p style="color:var(--violet-2);font-size:12px">✓ Доступ администратора подтверждён</p>';
+  };
+  window.closeAdmin=()=>document.getElementById('admin-modal').classList.add('hidden');
+
+  window.adminSaveAnime=async function(){
+    if(!(await isAdmin()))return;
+    const row={
+      id:document.getElementById('admin-anime-id').value.trim(),
+      title:document.getElementById('admin-anime-title').value.trim(),
+      genre:document.getElementById('admin-anime-genre').value.trim(),
+      year:Number(document.getElementById('admin-anime-year').value)||null,
+      status:document.getElementById('admin-anime-status').value.trim(),
+      rating:Number(document.getElementById('admin-anime-rating').value)||0,
+      poster:document.getElementById('admin-anime-poster').value.trim(),
+      description:document.getElementById('admin-anime-description').value.trim()
+    };
+    if(!row.id||!row.title){showToast('Укажи ID и название');return}
+    const {error}=await window.sb.from('anime').upsert(row);
+    if(error)showToast('Ошибка: '+error.message);else showToast('Аниме сохранено ✓');
+  };
+
+  window.adminSaveEpisode=async function(){
+    if(!(await isAdmin()))return;
+    const row={
+      anime_id:document.getElementById('admin-ep-anime').value.trim(),
+      episode_number:Number(document.getElementById('admin-ep-number').value),
+      title:document.getElementById('admin-ep-title').value.trim(),
+      video_url:document.getElementById('admin-ep-video').value.trim()
+    };
+    const {error}=await window.sb.from('episodes').upsert(row,{onConflict:'anime_id,episode_number'});
+    if(error)showToast('Ошибка: '+error.message);else showToast('Серия сохранена ✓');
+  };
+
+  window.adminSaveNews=async function(){
+    if(!(await isAdmin()))return;
+    const row={
+      title:document.getElementById('admin-news-title').value.trim(),
+      image:document.getElementById('admin-news-image').value.trim(),
+      body:document.getElementById('admin-news-body').value.trim()
+    };
+    if(!row.title){showToast('Укажи заголовок');return}
+    const {error}=await window.sb.from('news').insert(row);
+    if(error)showToast('Ошибка: '+error.message);else showToast('Новость опубликована ✓');
+  };
+
+  window.adminSendNotification=async function(){
+    if(!(await isAdmin()))return;
+    const row={
+      user_id:document.getElementById('admin-notify-user').value.trim(),
+      title:document.getElementById('admin-notify-title').value.trim(),
+      body:document.getElementById('admin-notify-body').value.trim(),
+      link:document.getElementById('admin-notify-link').value.trim()||null
+    };
+    if(!row.user_id||!row.title){showToast('Укажи UUID пользователя и заголовок');return}
+    const {error}=await window.sb.from('notifications').insert(row);
+    if(error)showToast('Ошибка: '+error.message);else showToast('Уведомление отправлено ✓');
+  };
+
+  function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]) )}
+
+  // Add admin button to the existing profile modal after each render.
+  const originalRender=window.renderProfileModal;
+  if(originalRender){
+    window.renderProfileModal=function(tab){
+      originalRender(tab);
+      addAdminButton();
+    };
+  }
+  function addAdminButton(){
+    const tabs=document.querySelector('.profile-tabs');
+    if(!tabs || tabs.querySelector('[data-admin-button]'))return;
+    const btn=document.createElement('button');
+    btn.className='profile-tab k-admin-btn';
+    btn.dataset.adminButton='1';
+    btn.textContent='🛠 Админ-панель';
+    btn.onclick=window.openAdmin;
+    tabs.appendChild(btn);
+    isAdmin().then(ok=>{if(!ok)btn.remove()});
+  }
+
+  window.addEventListener('load',async()=>{
+    await loadUnread();
+    if(window.sb) window.sb.auth.onAuthStateChange(()=>loadUnread());
+    setTimeout(addAdminButton,800);
+  });
+})();
+</script>
 </body>
 </html>
