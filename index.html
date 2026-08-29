@@ -800,6 +800,12 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 .k24-empty{padding:28px;text-align:center;color:var(--text-faint);border:1px dashed var(--line);border-radius:10px}
 @media(max-width:700px){.k24-row{grid-template-columns:52px 1fr}.k24-poster{width:52px;height:70px}.k24-actions{grid-column:1/-1;justify-content:stretch}.k24-actions button{flex:1}}
 </style>
+
+<style>
+.k30-save-status{margin-top:9px;font-size:12px;color:var(--text-faint);min-height:18px}
+.k30-save-status.ok{color:#8fe3a4}.k30-save-status.err{color:#ff9ba6}
+.k30-img{width:100%;height:100%;object-fit:cover;display:block}
+</style>
 </head>
 <body>
 
@@ -1845,9 +1851,12 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   function buildCard(item){
     const card = document.createElement('div');
     card.className='card';
+    const art = item.poster
+      ? `<img src="${escapeHtml(item.poster)}" referrerpolicy="no-referrer" alt="" style="width:100%;height:100%;object-fit:cover;display:block">`
+      : posterSVG(item.h1, item.h2, item.sym);
     card.innerHTML = `
       <div class="art">
-        ${posterSVG(item.h1, item.h2, item.sym)}
+        ${art}
         <span class="rating">★ ${Number(item.rating||0).toFixed(1)}${item.ratingCount ? ` <small>(${item.ratingCount})</small>` : ''}</span>
         ${item.tag ? `<span class="tag">${item.tag}</span>` : ''}
       </div>
@@ -2325,7 +2334,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     const tags = (item.tags || []).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
     content.innerHTML = `
       <div class="anime-detail">
-        <div class="anime-detail-poster">${posterSVG(item.h1,item.h2,item.sym)}</div>
+        <div class="anime-detail-poster">${item.poster ? `<img src="${esc(item.poster)}" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;display:block" alt="">` : posterSVG(item.h1,item.h2,item.sym)}</div>
         <div class="anime-detail-main">
           <h2>${esc(item.title)}</h2>
           <div class="anime-meta">
@@ -3983,6 +3992,111 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     repairSaveButtons();
     setInterval(repairSaveButtons,500);
   });
+})();
+</script>
+
+<script>
+/* KUROSHI v30 — clean admin save path and real poster display */
+(function(){
+  const rootSel='#profile-modal.k-admin-open .profile-content';
+  const root=()=>document.querySelector(rootSel);
+  const el=id=>{const r=root();return r?.querySelector('#'+CSS.escape(id))||document.getElementById(id)};
+  const value=id=>String(el(id)?.value??'').trim();
+  const status=msg=>{
+    const s=el('k30-save-status');
+    if(!s)return;
+    s.className='k30-save-status '+(msg.startsWith('Ошибка')?'err':'ok');
+    s.textContent=msg;
+  };
+
+  async function adminOK(){
+    try{
+      const {data,error}=await window.sb.rpc('is_admin');
+      return !error && data===true;
+    }catch(e){return false}
+  }
+
+  window.k30SaveAnime=async function(){
+    if(!(await adminOK())){status('Ошибка: нет доступа');return false}
+    const id=value('admin-anime-id');
+    const title=value('admin-anime-title');
+    if(!id||!title){status('Ошибка: заполните ID и название');return false}
+
+    const row={
+      id,
+      title,
+      genre:value('admin-anime-genre'),
+      year:Number(el('admin-anime-year')?.value)||null,
+      status:value('admin-anime-status'),
+      poster:value('admin-anime-poster'),
+      description:value('admin-anime-description'),
+      tags:[],
+      total_episodes:Number(el('admin-anime-episodes')?.value)||null,
+      rating:0
+    };
+
+    status('Сохраняем…');
+    try{
+      const {error}=await window.sb.from('anime').upsert(row,{onConflict:'id'});
+      if(error)throw error;
+
+      status('Сохранено ✓');
+      try{if(window.k25LoadList)await window.k25LoadList()}catch(_){}
+      try{if(window.refreshKuroshiCatalog)await window.refreshKuroshiCatalog()}catch(_){}
+      if(typeof showToast==='function')showToast('Аниме сохранено ✓');
+    }catch(e){
+      console.error('KUROSHI v30 save:',e);
+      status('Ошибка: '+(e?.message||'не удалось сохранить'));
+      if(typeof showToast==='function')showToast('Ошибка сохранения');
+    }
+    return false;
+  };
+
+  function repairSave(){
+    const r=root(); if(!r)return;
+    const card=r.querySelector('#admin-anime-title')?.closest('.admin-card');
+    if(!card)return;
+
+    // Add a clean status element.
+    if(!card.querySelector('#k30-save-status')){
+      const s=document.createElement('div');
+      s.id='k30-save-status';
+      s.className='k30-save-status';
+      card.querySelector('.admin-row')?.after(s);
+    }
+
+    const buttons=[...card.querySelectorAll('button')];
+    const old=buttons.find(b=>b.textContent.replace(/\s+/g,' ').trim()==='Сохранить');
+    if(!old)return;
+
+    // Replace the old button entirely: no stale inline handler/listeners survive.
+    if(old.dataset.k30Replaced==='1')return;
+    const fresh=old.cloneNode(true);
+    fresh.dataset.k30Replaced='1';
+    fresh.type='button';
+    fresh.removeAttribute('onclick');
+    fresh.addEventListener('click',function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      window.k30SaveAnime();
+    });
+    old.replaceWith(fresh);
+  }
+
+  // Final wrapper around the current openAdmin, which renders the actual in-profile form.
+  const previousOpen=window.openAdmin;
+  window.openAdmin=async function(){
+    if(previousOpen)await previousOpen();
+    setTimeout(repairSave,80);
+    setTimeout(repairSave,300);
+  };
+
+  // Keep the catalog images in sync when cards are rebuilt.
+  window.k30RefreshAfterSave=async function(){
+    if(window.refreshKuroshiCatalog)await window.refreshKuroshiCatalog();
+  };
+
+  window.addEventListener('load',()=>setTimeout(repairSave,400));
 })();
 </script>
 </body>
