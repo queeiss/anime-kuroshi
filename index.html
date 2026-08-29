@@ -817,6 +817,21 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 .k32-save-status.ok{color:#8fe3a4}.k32-save-status.err{color:#ff9ba6}
 #k32-save-anime-btn:disabled{opacity:.65;cursor:wait}
 </style>
+
+<style>
+#k32-save-anime-btn{
+  position:relative;
+  z-index:20!important;
+  pointer-events:auto!important;
+  touch-action:manipulation;
+  transition:transform .12s ease,opacity .2s ease;
+}
+#k32-save-anime-btn:active{transform:scale(.98)}
+#k32-save-anime-btn.k33-saving{opacity:.7;cursor:wait}
+.k33-save-status{margin-top:10px;min-height:20px;font-size:12px}
+.k33-save-status.ok{color:#8fe3a4}.k33-save-status.err{color:#ff9ba6}
+</style>
+
 </head>
 <body>
 
@@ -4323,5 +4338,106 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   if(p)new MutationObserver(()=>setTimeout(repair,10)).observe(p,{subtree:true,childList:true,attributes:true});
 })();
 </script>
+
+<script>
+/* KUROSHI v33 — visible save feedback, without changing the already-working DB save */
+(function(){
+  function root(){return document.querySelector('#profile-modal.k-admin-open .profile-content')}
+  function find(id){const r=root();return (r&&r.querySelector('#'+CSS.escape(id)))||document.getElementById(id)}
+  function setStatus(text,ok){
+    const r=root(); if(!r)return;
+    let s=r.querySelector('#k33-save-status');
+    if(!s){
+      s=document.createElement('div');
+      s.id='k33-save-status';
+      s.className='k33-save-status';
+      const card=find('k32-save-anime-btn')?.closest('.admin-card');
+      (card?.querySelector('#k32-save-anime-btn')||card)?.after(s);
+    }
+    s.textContent=text;
+    s.className='k33-save-status '+(ok?'ok':'err');
+  }
+
+  async function save(){
+    const btn=find('k32-save-anime-btn');
+    if(btn?.classList.contains('k33-saving'))return;
+    if(btn){btn.classList.add('k33-saving');btn.disabled=true;btn.textContent='Сохраняем…'}
+    setStatus('Сохраняем…',true);
+
+    try{
+      const {data,error}=await window.sb.rpc('is_admin');
+      if(error||data!==true)throw new Error('Нет доступа к админ-панели');
+
+      const get=id=>String(find(id)?.value??'').trim();
+      const id=get('admin-anime-id'), title=get('admin-anime-title');
+      if(!id||!title)throw new Error('Заполните ID и название');
+
+      const row={
+        id,title,
+        genre:get('admin-anime-genre'),
+        year:Number(find('admin-anime-year')?.value)||null,
+        status:get('admin-anime-status'),
+        poster:get('admin-anime-poster'),
+        description:get('admin-anime-description'),
+        tags:[],
+        total_episodes:Number(find('admin-anime-episodes')?.value)||null
+      };
+
+      const {error:saveError}=await window.sb.from('anime').upsert(row,{onConflict:'id'});
+      if(saveError)throw saveError;
+
+      setStatus('Сохранено ✓',true);
+      btn.textContent='Сохранено ✓';
+      if(typeof showToast==='function')showToast('Аниме сохранено ✓');
+
+      // Refresh only after success, then restore button label.
+      try{if(window.k25LoadList)await window.k25LoadList()}catch(_){}
+      try{if(window.refreshKuroshiCatalog)await window.refreshKuroshiCatalog()}catch(_){}
+      setTimeout(()=>{
+        const b=find('k32-save-anime-btn');
+        if(b){b.textContent='Сохранить';b.disabled=false;b.classList.remove('k33-saving')}
+      },1000);
+    }catch(e){
+      console.error('KUROSHI v33 save:',e);
+      setStatus('Ошибка: '+(e?.message||String(e)),false);
+      const b=find('k32-save-anime-btn');
+      if(b){b.textContent='Сохранить';b.disabled=false;b.classList.remove('k33-saving')}
+    }
+  }
+
+  window.k33SaveAnime=save;
+
+  function bind(){
+    const r=root();if(!r)return;
+    const btn=r.querySelector('#k32-save-anime-btn')||[...r.querySelectorAll('button')].find(b=>
+      (b.textContent||'').trim()==='Сохранить' && b.closest('.admin-card')?.querySelector('#admin-anime-title')
+    );
+    if(!btn)return;
+    btn.id='k32-save-anime-btn';
+    btn.type='button';
+    btn.removeAttribute('data-k31-save-anime');
+    // Clone exactly once to remove every stale listener attached by older versions.
+    if(btn.dataset.k33Clean!=='1'){
+      const clean=btn.cloneNode(true);
+      clean.dataset.k33Clean='1';
+      clean.id='k32-save-anime-btn';
+      clean.type='button';
+      clean.removeAttribute('onclick');
+      clean.addEventListener('click',function(e){
+        e.preventDefault();
+        e.stopPropagation();
+        save();
+      });
+      btn.replaceWith(clean);
+    }
+  }
+
+  // Bind whenever the in-profile admin DOM is rendered/re-rendered.
+  window.addEventListener('load',()=>setTimeout(bind,150));
+  const p=document.getElementById('profile-modal');
+  if(p)new MutationObserver(()=>setTimeout(bind,15)).observe(p,{subtree:true,childList:true,attributes:true});
+})();
+</script>
+
 </body>
 </html>
