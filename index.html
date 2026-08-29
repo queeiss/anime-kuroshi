@@ -1638,5 +1638,111 @@
 })();
 </script>
 
+
+<script>
+/* KUROSHI v3 UI helpers: progress, ratings, comments, achievements, follows, notifications */
+(function () {
+  const sb = window.sb;
+
+  async function user() {
+    if (!sb) return null;
+    const { data } = await sb.auth.getUser();
+    return data?.user || null;
+  }
+
+  window.KuroshiV3 = {
+    async saveProgress(anime, episode, totalEpisodes) {
+      const u = await user(); if (!u) return;
+      const key = String(anime.id ?? anime.title);
+      const total = Number(totalEpisodes) || null;
+      const percent = total ? Math.min(100, Math.round(Number(episode) / total * 100)) : 0;
+      const { error } = await sb.from('anime_progress').upsert({
+        user_id: u.id, anime_key: key,
+        anime_title: anime.title ?? anime.name ?? '',
+        episode: Number(episode) || 0,
+        total_episodes: total,
+        progress_percent: percent,
+        last_watched_at: new Date().toISOString()
+      }, { onConflict: 'user_id,anime_key' });
+      if (error) console.error('Progress:', error);
+    },
+
+    async rate(anime, rating) {
+      const u = await user(); if (!u) throw new Error('Войдите в аккаунт');
+      const key = String(anime.id ?? anime.title);
+      const { error } = await sb.from('ratings').upsert({
+        user_id: u.id, anime_key: key, rating: Number(rating),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'user_id,anime_key' });
+      if (error) throw error;
+    },
+
+    async getRating(anime) {
+      const u = await user(); if (!u) return null;
+      const key = String(anime.id ?? anime.title);
+      const { data } = await sb.from('ratings')
+        .select('rating').eq('user_id', u.id).eq('anime_key', key).maybeSingle();
+      return data?.rating ?? null;
+    },
+
+    async addComment(anime, body) {
+      const u = await user(); if (!u) throw new Error('Войдите в аккаунт');
+      const text = String(body || '').trim();
+      if (!text) throw new Error('Комментарий пустой');
+      if (text.length > 2000) throw new Error('Максимум 2000 символов');
+      const { error } = await sb.from('comments').insert({
+        user_id: u.id, anime_key: String(anime.id ?? anime.title), body: text
+      });
+      if (error) throw error;
+    },
+
+    async comments(anime) {
+      const key = String(anime.id ?? anime.title);
+      const { data, error } = await sb.from('comments')
+        .select('id,user_id,anime_key,body,created_at')
+        .eq('anime_key', key).order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+
+    async toggleCommentLike(commentId) {
+      const u = await user(); if (!u) throw new Error('Войдите в аккаунт');
+      const { data } = await sb.from('comment_likes')
+        .select('comment_id').eq('comment_id', commentId).eq('user_id', u.id).maybeSingle();
+      if (data) {
+        await sb.from('comment_likes').delete()
+          .eq('comment_id', commentId).eq('user_id', u.id);
+      } else {
+        await sb.from('comment_likes').insert({ comment_id: commentId, user_id: u.id });
+      }
+    },
+
+    async progress() {
+      const u = await user(); if (!u) return [];
+      const { data } = await sb.from('anime_progress')
+        .select('*').eq('user_id', u.id)
+        .order('last_watched_at', { ascending: false });
+      return data || [];
+    },
+
+    async achievements() {
+      const u = await user(); if (!u) return [];
+      const { data } = await sb.from('user_achievements')
+        .select('achievement_id,unlocked_at,achievements(*)')
+        .eq('user_id', u.id);
+      return data || [];
+    },
+
+    async unreadNotifications() {
+      const u = await user(); if (!u) return [];
+      const { data } = await sb.from('notifications')
+        .select('*').eq('user_id', u.id).eq('is_read', false)
+        .order('created_at', { ascending: false });
+      return data || [];
+    }
+  };
+})();
+</script>
+
 </body>
 </html>
