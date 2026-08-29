@@ -2137,7 +2137,13 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     try {
       const lib = await cloudLibrary();
       localStorage.setItem('kuroshiLibrary', JSON.stringify(lib));
-      if (typeof window.renderProfileModal === 'function') {
+
+      // IMPORTANT: do not redraw the normal profile while the admin view is open.
+      // The previous code rebuilt profile-content on every visibilitychange,
+      // which is exactly why returning to the browser tab kicked you out of admin.
+      const profile = document.getElementById('profile-modal');
+      const adminOpen = profile && profile.classList.contains('k-admin-open');
+      if (!adminOpen && typeof window.renderProfileModal === 'function') {
         try { window.renderProfileModal(); } catch (_) {}
       }
     } catch (e) {
