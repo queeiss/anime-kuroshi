@@ -4577,102 +4577,6 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 </script>
 
 <script>
-/* KUROSHI v35 — persist admin view + explicit poster removal */
-(function(){
-  const ADMIN_KEY='kuroshi_admin_view_v1';
-
-  function root(){return document.querySelector('#profile-modal.k-admin-open .profile-content')}
-  function field(id){
-    const r=root();
-    return r ? r.querySelector('#'+CSS.escape(id)) : document.getElementById(id);
-  }
-  function status(text,ok=true){
-    const r=root();if(!r)return;
-    let s=r.querySelector('#k35-poster-status');
-    if(!s){
-      s=document.createElement('div');
-      s.id='k35-poster-status';
-      s.style.cssText='margin-top:8px;font-size:12px;min-height:18px';
-      const card=field('admin-anime-poster')?.closest('.admin-card');
-      (card?.querySelector('#admin-anime-poster')||card)?.after(s);
-    }
-    s.textContent=text;
-    s.style.color=ok?'#8fe3a4':'#ff9ba6';
-  }
-
-  async function adminOK(){
-    try{
-      const {data,error}=await window.sb.rpc('is_admin');
-      return !error && data===true;
-    }catch(e){return false}
-  }
-
-  window.k35ClearPoster=async function(){
-    const id=field('admin-anime-id')?.value?.trim();
-    if(!id){ showToast('Сначала выберите аниме через «Изменить»'); return; }
-    if(!confirm('Удалить постер у этого аниме?')) return;
-    if(!(await adminOK())){status('Нет доступа',false);return}
-
-    try{
-      const {error}=await window.sb.from('anime').update({poster:''}).eq('id',id);
-      if(error)throw error;
-
-      const p=field('admin-anime-poster');
-      if(p)p.value='';
-
-      const preview=field('k22-poster-preview')||field('k27-poster-preview');
-      if(preview){
-        preview.className='k22-preview-empty';
-        preview.innerHTML='Нет<br>постера';
-      }
-      const s=field('k27-poster-status')||field('k22-poster-status');
-      if(s){
-        s.textContent='Постер удалён ✓';
-        s.style.color='#8fe3a4';
-      }
-      status('Постер удалён из базы ✓',true);
-
-      try{if(window.k25LoadList)await window.k25LoadList()}catch(_){}
-      try{if(window.refreshKuroshiCatalog)await window.refreshKuroshiCatalog()}catch(_){}
-      if(typeof showToast==='function')showToast('Постер удалён ✓');
-    }catch(e){
-      console.error(e);
-      status('Ошибка удаления: '+(e?.message||String(e)),false);
-    }
-  };
-
-  // Preserve admin state for this browser tab.
-  const oldOpen=window.openAdmin;
-  window.openAdmin=async function(){
-    if(oldOpen)await oldOpen();
-    sessionStorage.setItem(ADMIN_KEY,'1');
-  };
-
-  const oldClose=window.closeAdmin;
-  window.closeAdmin=function(){
-    sessionStorage.removeItem(ADMIN_KEY);
-    if(oldClose)oldClose();
-  };
-
-  // Re-open admin if the SPA/page was restored from another browser tab or bfcache.
-  async function restoreAdmin(){
-    if(sessionStorage.getItem(ADMIN_KEY)!=='1')return;
-    const profile=document.getElementById('profile-modal');
-    if(!profile)return;
-    if(!profile.classList.contains('hidden') && profile.classList.contains('k-admin-open'))return;
-    const u = window.sb ? await window.sb.auth.getUser() : {data:{user:null}};
-    if(!u?.data?.user)return;
-    setTimeout(()=>window.openAdmin && window.openAdmin(),80);
-  }
-
-  window.addEventListener('pageshow',restoreAdmin);
-  document.addEventListener('visibilitychange',()=>{
-    if(!document.hidden)restoreAdmin();
-  });
-})();
-</script>
-
-<script>
 /* KUROSHI v36 — final override: single admin state, reliable poster clearing and save */
 (function(){
   const ADMIN_VIEW='kuroshi_admin_open_v36';
@@ -4875,102 +4779,27 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 })();
 </script>
 
+
+<style>
+/* KUROSHI v39 — fresh page load always starts at normal site/profile state */
+</style>
 <script>
-/* KUROSHI v37 — admin state is stored in the URL, so returning to/reloading the tab
-   restores the exact admin view instead of the normal profile. */
 (function(){
-  const ADMIN_HASH='#admin';
-
-  function markAdmin(){
-    try{
-      sessionStorage.setItem('kuroshi_admin_route','1');
-      localStorage.setItem('kuroshi_admin_route','1');
-      if(location.hash!==ADMIN_HASH){
-        history.replaceState(null,'',location.pathname+location.search+ADMIN_HASH);
-      }
-    }catch(e){}
-  }
-
-  function clearAdmin(){
-    try{
-      sessionStorage.removeItem('kuroshi_admin_route');
-      localStorage.removeItem('kuroshi_admin_route');
-      if(location.hash===ADMIN_HASH){
-        history.replaceState(null,'',location.pathname+location.search);
-      }
-    }catch(e){}
-  }
-
-  async function isAdmin(){
-    try{
-      if(!window.sb)return false;
-      const {data,error}=await window.sb.rpc('is_admin');
-      return !error && data===true;
-    }catch(e){return false}
-  }
-
-  const previousOpen=window.openAdmin;
-  window.openAdmin=async function(){
-    if(previousOpen) await previousOpen();
-    markAdmin();
-    // Re-apply after the dynamic profile/admin DOM is rendered.
-    setTimeout(()=>markAdmin(),50);
-    setTimeout(()=>markAdmin(),250);
-  };
-
-  const previousClose=window.closeAdmin;
-  window.closeAdmin=function(){
-    clearAdmin();
-    if(previousClose) previousClose();
-  };
-
-  async function restoreAdminRoute(){
-    if(location.hash!==ADMIN_HASH &&
-       sessionStorage.getItem('kuroshi_admin_route')!=='1' &&
-       localStorage.getItem('kuroshi_admin_route')!=='1') return;
-
-    if(!(await isAdmin())) {
-      clearAdmin();
-      return;
+  // A real browser/tab reload starts at Home. We intentionally do not auto-open
+  // profile/admin from localStorage/sessionStorage/hash. This prevents the
+  // profile/admin oscillation after reopening a closed tab.
+  try{
+    sessionStorage.removeItem('kuroshi_admin_view_v1');
+    sessionStorage.removeItem('kuroshi_admin_route');
+    localStorage.removeItem('kuroshi_admin_view_v1');
+    localStorage.removeItem('kuroshi_admin_route');
+    if(location.hash==='#admin'){
+      history.replaceState(null,'',location.pathname+location.search);
     }
+  }catch(e){}
 
-    try{
-      sessionStorage.setItem('kuroshi_admin_route','1');
-      localStorage.setItem('kuroshi_admin_route','1');
-      if(location.hash!==ADMIN_HASH){
-        history.replaceState(null,'',location.pathname+location.search+ADMIN_HASH);
-      }
-
-      const profile=document.getElementById('profile-modal');
-      if(profile && (profile.classList.contains('hidden') || !profile.classList.contains('k-admin-open'))){
-        // Open the profile first; the existing admin function will replace its content.
-        if(typeof openProfileModal==='function') openProfileModal();
-      }
-
-      setTimeout(async()=>{
-        try{
-          if(typeof window.openAdmin==='function') await window.openAdmin();
-        }catch(e){console.error(e)}
-      },180);
-
-      setTimeout(()=>{
-        try{
-          if(typeof window.k25LoadList==='function') window.k25LoadList();
-          if(typeof window.k24LoadList==='function') window.k24LoadList();
-          if(typeof window.k21RenderAnimeList==='function') window.k21RenderAnimeList();
-        }catch(e){}
-      },500);
-    }catch(e){console.error('KUROSHI admin restore:',e)}
-  }
-
-  // Browser tab can be restored from cache or fully reloaded.
-  window.addEventListener('pageshow',()=>setTimeout(restoreAdminRoute,80));
-  window.addEventListener('load',()=>setTimeout(restoreAdminRoute,120));
-
-  // If the hash is changed manually/back-forward, keep the UI in sync.
-  window.addEventListener('hashchange',()=>{
-    if(location.hash===ADMIN_HASH) setTimeout(restoreAdminRoute,50);
-  });
+  // Never auto-open admin/profile on visibilitychange/pageshow/load.
+  // Explicit clicks remain responsible for opening them.
 })();
 </script>
 </body>
