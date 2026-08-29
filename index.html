@@ -717,6 +717,16 @@
 .k12-title{font-family:'Bebas Neue',sans-serif;font-size:40px;letter-spacing:1px;margin-bottom:6px}
 .k12-sub{color:var(--text-faint);font-size:13px;margin-bottom:20px}
 </style>
+
+<style>
+/* KUROSHI v13 — visible logout control */
+.k13-logout{
+  width:100%;margin-top:18px;padding:12px 16px;border-radius:10px;
+  border:1px solid rgba(255,90,110,.35);background:transparent;
+  color:#ff8d9a;font:700 13px inherit;cursor:pointer;
+}
+.k13-logout:hover{background:rgba(255,90,110,.08);border-color:#ff6f82}
+</style>
 </head>
 <body>
 
@@ -2666,6 +2676,45 @@
     profile.classList.remove('k-admin-open');
     if(typeof renderProfileModal==='function')renderProfileModal('library');
   };
+})();
+</script>
+
+<script>
+/* KUROSHI v13 — logout action */
+(function(){
+  function addLogout(){
+    const profile=document.getElementById('profile-modal');
+    const box=profile?.querySelector('.profile-content');
+    if(!box || profile.classList.contains('k-admin-open')) return;
+    if(box.querySelector('.k13-logout')) return;
+
+    const btn=document.createElement('button');
+    btn.className='k13-logout';
+    btn.type='button';
+    btn.textContent='🚪 Выйти из аккаунта';
+    btn.onclick=async function(){
+      try{
+        if(window.sb) await window.sb.auth.signOut();
+      }catch(e){}
+      try{
+        localStorage.removeItem('STORAGE_SESSION');
+        localStorage.removeItem('kuroshi_session_v2');
+      }catch(e){}
+      if(typeof refreshAuthUI==='function') refreshAuthUI();
+      if(typeof closeProfileModal==='function') closeProfileModal();
+      if(typeof showToast==='function') showToast('Вы вышли из аккаунта');
+    };
+    box.appendChild(btn);
+  }
+
+  window.addEventListener('load',()=>{
+    const profile=document.getElementById('profile-modal');
+    if(profile){
+      new MutationObserver(()=>setTimeout(addLogout,30))
+        .observe(profile,{attributes:true,childList:true,subtree:true});
+    }
+    setInterval(addLogout,800);
+  });
 })();
 </script>
 </body>
