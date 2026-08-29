@@ -914,6 +914,7 @@
   const SUPABASE_URL = 'https://qndgawtfricqovsgnqxm.supabase.co';
   const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_7bYHs__Grvw1Zo2Fxb_O9A_1bvXgvWc';
   const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  window.sb = sb;
   let currentUserData = null;
   let authReady = false;
 
