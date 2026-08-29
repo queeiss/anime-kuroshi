@@ -5100,5 +5100,339 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 })();
 </script>
 <script>window.KUROSHI_PERF_FIX=true;</script>
+
+<style>
+  /* KUROSHI — friends system */
+  .k-friends-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+  .k-friend-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line);background:var(--surface);color:var(--text);border-radius:9px;padding:9px 13px;font:700 12px inherit;cursor:pointer;transition:.2s}
+  .k-friend-btn:hover{border-color:var(--violet);transform:translateY(-1px)}
+  .k-friend-btn.primary{border-color:transparent;background:linear-gradient(120deg,var(--violet),var(--magenta));color:#fff}
+  .k-friend-btn.danger{color:#ff9aa7;border-color:rgba(255,90,110,.35)}
+  html[data-theme="mono"] .k-friend-btn.primary{color:#000}
+  .k-friend-summary{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}
+  .k-friend-stat{padding:13px 14px;background:var(--surface-2);border:1px solid var(--line);border-radius:12px}
+  .k-friend-stat strong{display:block;font-size:18px}.k-friend-stat span{font-size:10.5px;color:var(--text-faint)}
+  .k-friend-list{display:grid;gap:9px;margin-top:14px}
+  .k-friend-row{display:flex;align-items:center;gap:12px;padding:11px 12px;border:1px solid var(--line);background:var(--surface-2);border-radius:12px;cursor:pointer}
+  .k-friend-row:hover{border-color:var(--violet)}
+  .k-friend-row .mini{width:42px;height:42px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--violet),var(--magenta));color:#fff;font-weight:800;flex:none}
+  .k-friend-row .mini img{width:100%;height:100%;object-fit:cover}
+  .k-friend-row .meta{flex:1;min-width:0}.k-friend-row .meta strong{display:block;font-size:13px}.k-friend-row .meta span{display:block;font-size:10.5px;color:var(--text-faint);margin-top:2px}
+  .k-request-card{padding:12px;border:1px solid var(--line);background:var(--surface-2);border-radius:12px;margin-top:9px}
+  .k-request-head{display:flex;align-items:center;gap:11px}.k-request-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+  .k-request-card .mini{width:42px;height:42px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--violet),var(--magenta));color:#fff;font-weight:800;flex:none}
+  .k-request-card .mini img{width:100%;height:100%;object-fit:cover}
+  .k-friends-empty{padding:32px 16px;text-align:center;color:var(--text-faint);border:1px dashed var(--line);border-radius:12px}
+  @media(max-width:700px){.k-friend-summary{grid-template-columns:1fr 1fr}.k-friend-summary .k-friend-stat:last-child{grid-column:1/-1}}
+</style>
+<script>
+/* KUROSHI — friends / profiles v1 */
+(function(){
+  const table='friendships';
+  const esc = v => typeof escapeHtml==='function' ? escapeHtml(v) : String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const toast = m => typeof showToast==='function' ? showToast(m) : alert(m);
+  const avatarHtml = u => u?.avatar ? `<img src="${esc(u.avatar)}" alt="">` : esc((u?.name||'П')[0].toUpperCase());
+  const getMe = async()=>{ if(!window.sb)return null; const {data}=await sb.auth.getUser(); return data?.user||null; };
+
+  function profileShellStyle(){
+    const modal=document.getElementById('profile-modal');
+    return modal && !modal.classList.contains('hidden');
+  }
+
+  async function loadPublicProfile(id){
+    const {data,error}=await sb.rpc('get_public_profiles');
+    if(error) throw error;
+    const row=(data||[]).find(x=>String(x.id)===String(id));
+    if(!row) throw new Error('Пользователь не найден');
+    return {id:row.id,name:row.name||'Пользователь',avatar:row.avatar||'',createdAt:row.created_at,xp:Number(row.xp)||0,level:userLevel(Number(row.xp)||0)};
+  }
+
+  async function relationWith(meId, otherId){
+    const {data,error}=await sb.from(table).select('id,requester_id,addressee_id,status,created_at,updated_at')
+      .or(`and(requester_id.eq.${meId},addressee_id.eq.${otherId}),and(requester_id.eq.${otherId},addressee_id.eq.${meId})`).limit(1).maybeSingle();
+    if(error) throw error;
+    return data||null;
+  }
+
+  async function sendFriendRequest(otherId){
+    const me=await getMe();
+    if(!me){openAuthModal('login');return;}
+    if(String(me.id)===String(otherId)){toast('Нельзя добавить себя в друзья');return;}
+    try{
+      const existing=await relationWith(me.id,otherId);
+      if(existing?.status==='accepted'){toast('Вы уже друзья');return;}
+      if(existing?.status==='pending'){
+        if(String(existing.requester_id)===String(me.id)) toast('Заявка уже отправлена');
+        else toast('Этот пользователь уже отправил вам заявку');
+        return;
+      }
+      if(existing?.status==='rejected') await sb.from(table).delete().eq('id',existing.id);
+      const {error}=await sb.from(table).insert({requester_id:me.id,addressee_id:otherId,status:'pending'});
+      if(error) throw error;
+      toast('Заявка в друзья отправлена ✓');
+      await loadFriendAlerts();
+      await openUserProfile(otherId);
+    }catch(e){
+      console.error('sendFriendRequest',e);
+      toast('Не удалось отправить заявку. Проверьте таблицу friendships в Supabase.');
+    }
+  }
+
+  async function acceptFriendRequest(id){
+    const me=await getMe(); if(!me)return;
+    try{
+      const {data,error}=await sb.from(table).update({status:'accepted',updated_at:new Date().toISOString()}).eq('id',id).eq('addressee_id',me.id).select('*').single();
+      if(error)throw error;
+      toast('Заявка принята ✓');
+      await openUserProfile(data.requester_id);
+      await loadFriendAlerts();
+    }catch(e){console.error(e);toast('Не удалось принять заявку');}
+  }
+
+  async function rejectFriendRequest(id){
+    const me=await getMe(); if(!me)return;
+    try{
+      const {error}=await sb.from(table).update({status:'rejected',updated_at:new Date().toISOString()}).eq('id',id).eq('addressee_id',me.id);
+      if(error)throw error;
+      toast('Заявка отклонена');
+      await openFriendRequests();
+      await loadFriendAlerts();
+    }catch(e){console.error(e);toast('Не удалось отклонить заявку');}
+  }
+
+  async function removeFriend(otherId){
+    const me=await getMe();if(!me)return;
+    try{
+      const rel=await relationWith(me.id,otherId);
+      if(!rel)return;
+      const {error}=await sb.from(table).delete().eq('id',rel.id);
+      if(error)throw error;
+      toast('Пользователь удалён из друзей');
+      await openUserProfile(otherId);
+    }catch(e){console.error(e);toast('Не удалось удалить из друзей');}
+  }
+
+  async function cancelFriendRequest(otherId){
+    const me=await getMe();if(!me)return;
+    try{
+      const rel=await relationWith(me.id,otherId);
+      if(!rel || rel.status!=='pending' || String(rel.requester_id)!==String(me.id)) return;
+      const {error}=await sb.from(table).delete().eq('id',rel.id);
+      if(error)throw error;
+      toast('Заявка отменена');
+      await openUserProfile(otherId);
+    }catch(e){console.error(e);toast('Не удалось отменить заявку');}
+  }
+
+  async function friendshipState(otherId){
+    const me=await getMe();
+    if(!me || String(me.id)===String(otherId))return {state:'self'};
+    const rel=await relationWith(me.id,otherId);
+    if(!rel)return {state:'none'};
+    if(rel.status==='accepted')return {state:'friends',rel};
+    if(rel.status==='pending')return String(rel.requester_id)===String(me.id) ? {state:'outgoing',rel} : {state:'incoming',rel};
+    return {state:'none'};
+  }
+
+  function renderFriendAction(state,u){
+    if(state.state==='self') return '';
+    if(state.state==='friends') return `<button class="k-friend-btn danger" onclick="removeFriend('${esc(u.id)}');event.stopPropagation()">✓ В друзьях · удалить</button>`;
+    if(state.state==='outgoing') return `<button class="k-friend-btn" onclick="cancelFriendRequest('${esc(u.id)}');event.stopPropagation()">Заявка отправлена · отменить</button>`;
+    if(state.state==='incoming') return `<button class="k-friend-btn primary" onclick="openFriendRequests();event.stopPropagation()">📨 Ответить на заявку</button>`;
+    return `<button class="k-friend-btn primary" onclick="sendFriendRequest('${esc(u.id)}');event.stopPropagation()">＋ Добавить в друзья</button>`;
+  }
+
+  async function openUserProfile(id){
+    const me=await getMe();
+    if(!me){openAuthModal('login');return;}
+    try{
+      const u=await loadPublicProfile(id);
+      const state=await friendshipState(id);
+      const modal=document.getElementById('profile-modal');
+      if(!modal)return;
+      const content=modal.querySelector('.profile-content');
+      const xpInfo=levelProgress(u.xp);
+      content.innerHTML=`
+        <div class="profile-head">
+          <div class="profile-big-avatar">${avatarHtml(u)}</div>
+          <div class="profile-title">
+            <h2>${esc(u.name)}</h2>
+            <p>${u.level ? 'Уровень '+u.level+' · ' : ''}${u.xp} XP · Зарегистрирован ${formatDate(u.createdAt)}</p>
+            <div class="xp-wrap"><div class="xp-bar"><i style="width:${xpInfo.pct}%"></i></div><div class="xp-text">Уровень ${xpInfo.level} · ${xpInfo.current} / ${xpInfo.needed} XP до следующего</div></div>
+            <div class="k-friends-actions">${renderFriendAction(state,u)}<button class="k-friend-btn" onclick="openFriendRequests();event.stopPropagation()">👥 Мои друзья</button></div>
+          </div>
+        </div>
+        <div class="profile-tabs">
+          <button class="profile-tab active">Профиль</button>
+          <button class="profile-tab" onclick="openUserLibrary('${esc(u.id)}');event.stopPropagation()">Библиотека</button>
+          <button class="profile-tab" onclick="openFriendRequests();event.stopPropagation()">Заявки</button>
+        </div>
+        <div class="k-friend-summary">
+          <div class="k-friend-stat"><strong>${u.level}</strong><span>уровень</span></div>
+          <div class="k-friend-stat"><strong>${u.xp}</strong><span>XP</span></div>
+          <div class="k-friend-stat"><strong>👥</strong><span>социальный профиль</span></div>
+        </div>
+        <div id="k-user-extra" class="library-grid"></div>`;
+      // Try to load extended profile details from the profiles table. The list RPC intentionally exposes only public basics.
+      const {data:full}=await sb.from('profiles').select('id,name,age,bio,telegram,vk,instagram,avatar,xp,level,created_at,library').eq('id',id).maybeSingle();
+      const extra=full||u;
+      const box=document.getElementById('k-user-extra');
+      box.innerHTML=`<div class="library-item" style="grid-column:1/-1">
+        <h4>О пользователе</h4>
+        <p style="white-space:pre-wrap;line-height:1.7;margin-top:7px">${esc(extra.bio||'Пользователь пока ничего о себе не написал.')}</p>
+        ${extra.age?`<p style="margin-top:9px">Возраст: ${esc(extra.age)}</p>`:''}
+        ${(extra.telegram||extra.vk||extra.instagram)?`<div class="profile-links">
+          ${extra.telegram?`<span class="profile-link">Telegram: ${esc(extra.telegram)}</span>`:''}
+          ${extra.vk?`<span class="profile-link">VK: ${esc(extra.vk)}</span>`:''}
+          ${extra.instagram?`<span class="profile-link">Instagram: ${esc(extra.instagram)}</span>`:''}
+        </div>`:''}
+      </div>`;
+      modal.classList.remove('hidden');
+      modal.classList.add('k-other-profile');
+    }catch(e){console.error(e);toast('Не удалось открыть профиль пользователя');}
+  }
+
+  async function openUserLibrary(id){
+    try{
+      const me=await getMe(); if(!me)return;
+      const u=await loadPublicProfile(id);
+      const {data:full,error}=await sb.from('profiles').select('library').eq('id',id).maybeSingle();
+      if(error)throw error;
+      const lib=full?.library||{};
+      const labels=[['watching','Смотрю'],['planned','В планах'],['dropped','Брошено'],['later','Досмотрю позже'],['favorites','Любимые']];
+      const modal=document.getElementById('profile-modal'), box=modal.querySelector('.profile-content');
+      const renderItems=k=>{const items=lib[k]||[];return items.length?items.map(t=>`<div class="library-item"><h4>${esc(t.title||t)}</h4><p>${esc(t.status||'Аниме')}</p></div>`).join(''):`<div style="grid-column:1/-1;text-align:center;padding:35px;color:var(--text-faint)">В этом списке пока нет аниме.</div>`};
+      box.querySelector('#k-user-extra').innerHTML=`<div style="grid-column:1/-1"><div class="profile-tabs">${labels.map(([k,l],i)=>`<button class="profile-tab ${i===0?'active':''}" onclick="document.getElementById('k-user-library-grid').innerHTML=window.__kLib('${k}')">${l} (${(lib[k]||[]).length})</button>`).join('')}</div><div id="k-user-library-grid" class="library-grid">${renderItems('watching')}</div></div>`;
+      window.__kLib=k=>renderItems(k);
+    }catch(e){console.error(e);toast('Не удалось загрузить библиотеку');}
+  }
+
+  async function openFriendRequests(){
+    const me=await getMe();
+    if(!me){openAuthModal('login');return;}
+    const modal=document.getElementById('profile-modal');if(!modal)return;
+    const content=modal.querySelector('.profile-content');
+    try{
+      const {data:incoming,error}=await sb.from(table).select('id,requester_id,created_at').eq('addressee_id',me.id).eq('status','pending').order('created_at',{ascending:false});
+      if(error)throw error;
+      const ids=(incoming||[]).map(x=>x.requester_id);
+      let users=[];
+      if(ids.length){
+        const {data:all}=await sb.rpc('get_public_profiles');
+        users=(all||[]).filter(x=>ids.includes(x.id)).map(x=>({id:x.id,name:x.name||'Пользователь',avatar:x.avatar||'',xp:Number(x.xp)||0,level:userLevel(Number(x.xp)||0),createdAt:x.created_at}));
+      }
+      const {data:friends,error:fe}=await sb.from(table).select('id,requester_id,addressee_id').or(`requester_id.eq.${me.id},addressee_id.eq.${me.id}`).eq('status','accepted');
+      if(fe)throw fe;
+      const friendIds=(friends||[]).map(r=>String(r.requester_id)===String(me.id)?r.addressee_id:r.requester_id);
+      const {data:allUsers}=await sb.rpc('get_public_profiles');
+      const friendUsers=(allUsers||[]).filter(x=>friendIds.includes(x.id));
+      content.innerHTML=`
+        <div class="profile-head"><div><div class="profile-title"><h2>👥 Друзья и заявки</h2><p>Управление друзьями и входящими заявками</p></div></div></div>
+        <div class="k-friends-actions"><button class="k-friend-btn" onclick="openProfileModal()">← Мой профиль</button><button class="k-friend-btn" onclick="showPage('users');closeProfileModal()">Найти пользователей</button></div>
+        <div class="k-friend-summary">
+          <div class="k-friend-stat"><strong>${friendUsers.length}</strong><span>друзей</span></div>
+          <div class="k-friend-stat"><strong>${users.length}</strong><span>новых заявок</span></div>
+          <div class="k-friend-stat"><strong>${users.length+friendUsers.length}</strong><span>контактов</span></div>
+        </div>
+        <h3 style="font-size:16px;margin-top:10px">Входящие заявки</h3>
+        <div class="k-friend-list">${users.length?users.map(u=>{
+          const req=incoming.find(r=>String(r.requester_id)===String(u.id));
+          return `<div class="k-request-card"><div class="k-request-head"><div class="mini">${avatarHtml(u)}</div><div style="flex:1"><strong>${esc(u.name)}</strong><div style="font-size:10.5px;color:var(--text-faint);margin-top:2px">LVL ${u.level} · ${u.xp} XP</div></div></div><div class="k-request-actions"><button class="k-friend-btn primary" onclick="acceptFriendRequest('${esc(req.id)}')">✓ Принять</button><button class="k-friend-btn danger" onclick="rejectFriendRequest('${esc(req.id)}')">✕ Отклонить</button><button class="k-friend-btn" onclick="openUserProfile('${esc(u.id)}')">Открыть профиль</button></div></div>`;
+        }).join(''):`<div class="k-friends-empty">Новых заявок нет.</div>`}</div>
+        <h3 style="font-size:16px;margin-top:24px">Мои друзья</h3>
+        <div class="k-friend-list">${friendUsers.length?friendUsers.map(u=>`<div class="k-friend-row" onclick="openUserProfile('${esc(u.id)}')"><div class="mini">${avatarHtml(u)}</div><div class="meta"><strong>${esc(u.name)}</strong><span>LVL ${userLevel(Number(u.xp)||0)} · ${Number(u.xp)||0} XP</span></div><span style="color:var(--text-faint)">›</span></div>`).join(''):`<div class="k-friends-empty">Пока нет друзей. Откройте раздел «Пользователи» и добавьте кого-нибудь.</div>`}</div>`;
+      modal.classList.remove('hidden');
+      modal.classList.remove('k-other-profile');
+    }catch(e){console.error('openFriendRequests',e);toast('Не удалось загрузить друзей. Проверьте таблицу friendships в Supabase.');}
+  }
+
+  async function loadFriendAlerts(){
+    try{
+      const me=await getMe();if(!me)return;
+      const {count,error}=await sb.from(table).select('id',{count:'exact',head:true}).eq('addressee_id',me.id).eq('status','pending');
+      if(error)throw error;
+      const badge=document.getElementById('k-notify-badge');
+      const n=count||0;
+      if(badge){badge.textContent=n>99?'99+':n;badge.classList.toggle('hidden',!n);}
+      const btn=document.getElementById('k-notify-btn');
+      if(btn)btn.title=n?`Заявки в друзья: ${n}`:'Уведомления';
+    }catch(e){console.error('friend alerts',e)}
+  }
+
+  // Users directory: make each row openable and add the friend action.
+  const wrapUsers=window.renderUsers;
+  window.renderUsers=async function(){
+    await wrapUsers();
+    const wrap=document.getElementById('users-list');if(!wrap)return;
+    const me=await getMe();
+    [...wrap.children].forEach(row=>{
+      const nameEl=row.querySelector('.user-name');
+      if(!nameEl)return;
+      const raw=nameEl.textContent.replace('· ты','').trim();
+      const avatars=row.querySelector('.user-avatar');
+      // Prefer the user object stored by data attribute below; fall back to name matching only for already-rendered rows.
+      let id=row.dataset.userId;
+      if(id){
+        row.style.cursor='pointer';row.onclick=()=>openUserProfile(id);
+        let actions=row.querySelector('.k-user-actions');
+        if(!actions){actions=document.createElement('div');actions.className='k-user-actions';row.appendChild(actions)}
+        if(me && String(id)!==String(me.id)){
+          friendshipState(id).then(st=>actions.innerHTML=renderFriendAction(st,{id,name:raw})).catch(()=>{});
+        }
+      }
+    });
+    await loadFriendAlerts();
+  };
+
+  // Patch the original user row renderer by observing added rows and reading their names from the public directory.
+  const origUsersRender=document.querySelector ? null : null;
+  async function enhanceUsers(){
+    const wrap=document.getElementById('users-list');if(!wrap)return;
+    const {data}=await sb.rpc('get_public_profiles');
+    const byName=new Map((data||[]).map(u=>[String(u.name||'').trim().toLocaleLowerCase('ru'),u]));
+    [...wrap.children].forEach(row=>{
+      const name=row.querySelector('.user-name')?.textContent?.replace('· ты','').trim();
+      const u=byName.get(String(name||'').toLocaleLowerCase('ru'));
+      if(!u)return;
+      row.dataset.userId=u.id;row.style.cursor='pointer';row.onclick=()=>openUserProfile(u.id);
+      let actions=row.querySelector('.k-user-actions');
+      if(!actions){actions=document.createElement('div');actions.className='k-user-actions';actions.style.display='flex';actions.style.justifyContent='flex-end';actions.style.minWidth='150px';row.appendChild(actions)}
+      if(me && String(me.id)!==String(u.id)) friendshipState(u.id).then(st=>actions.innerHTML=renderFriendAction(st,u));
+      else if(me) actions.innerHTML='<span style="font-size:11px;color:var(--text-faint)">Это вы</span>';
+    });
+  }
+  const originalShowPage=window.showPage;
+  window.showPage=function(page){
+    originalShowPage(page);
+    if(page==='users')setTimeout(enhanceUsers,200);
+  };
+
+  // Clicking the notification bell opens friend requests when there are pending ones; otherwise preserves notifications.
+  const oldOpen=window.openNotifications;
+  window.openNotifications=async function(){
+    try{
+      const me=await getMe();
+      if(me){
+        const {count}=await sb.from(table).select('id',{count:'exact',head:true}).eq('addressee_id',me.id).eq('status','pending');
+        if((count||0)>0){await openFriendRequests();return;}
+      }
+    }catch(e){}
+    if(oldOpen) return oldOpen();
+  };
+
+  window.sendFriendRequest=sendFriendRequest;
+  window.acceptFriendRequest=acceptFriendRequest;
+  window.rejectFriendRequest=rejectFriendRequest;
+  window.removeFriend=removeFriend;
+  window.cancelFriendRequest=cancelFriendRequest;
+  window.openUserProfile=openUserProfile;
+  window.openUserLibrary=openUserLibrary;
+  window.openFriendRequests=openFriendRequests;
+  window.loadFriendAlerts=loadFriendAlerts;
+
+  window.addEventListener('load',()=>setTimeout(loadFriendAlerts,900));
+})();
+</script>
+
 </body>
 </html>
