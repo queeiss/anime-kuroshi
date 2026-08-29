@@ -3216,13 +3216,12 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     showToast('Аниме сохранено в каталоге ✓');
   };
 
+  window.k21Load = function(){
+    setTimeout(function(){ window.k21RenderAnimeList && window.k21RenderAnimeList(); }, 80);
+  };
+
   window.addEventListener('load',()=>{
-    const modal=$('admin-modal');
-    if(modal){
-      new MutationObserver(()=>{
-        if(!modal.classList.contains('hidden'))setTimeout(k21RenderAnimeList,50);
-      }).observe(modal,{attributes:true});
-    }
+    setTimeout(()=>window.k21RenderAnimeList && window.k21RenderAnimeList(),250);
   });
 })();
 </script>
@@ -3295,6 +3294,18 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 window.adminSaveAnime=function(){
   return window.k21SaveAnime ? window.k21SaveAnime() : null;
 };
+</script>
+
+<script>
+(function(){
+  const baseOpenAdmin = window.openAdmin;
+  window.openAdmin = async function(){
+    if(baseOpenAdmin) await baseOpenAdmin();
+    setTimeout(()=>{
+      if(window.k21RenderAnimeList) window.k21RenderAnimeList();
+    },120);
+  };
+})();
 </script>
 </html>
 
