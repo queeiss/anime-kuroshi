@@ -900,6 +900,23 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 .k43-genres{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 12px}
 .k43-genre-view{padding:5px 9px;border-radius:999px;background:var(--surface-2);border:1px solid var(--line);font-size:10.5px;color:var(--text-dim)}
 </style>
+
+<style>
+.k44-alt-title{
+  margin:2px 0 7px;
+  color:var(--text-faint);
+  font-size:11px;
+  font-style:italic;
+  line-height:1.4;
+}
+.k44-genres{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}
+.k44-genres span{
+  display:inline-flex;padding:4px 7px;border-radius:999px;
+  background:var(--surface-2);border:1px solid var(--line);
+  color:var(--text-faint);font-size:10px;line-height:1;
+}
+.k44-genres .k44-year{background:transparent}
+</style>
 </head>
 <body>
 
@@ -1957,7 +1974,11 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       </div>
       <div class="info">
         <h3>${escapeHtml(item.title)}</h3>
-        <p>${escapeHtml(item.genre||'')} · ${escapeHtml(item.year||'')}</p>
+        ${item.alternate_title_en ? `<div class="k44-alt-title">${escapeHtml(item.alternate_title_en)}</div>` : ''}
+        <div class="k44-genres">
+          ${String(item.genre||'').split(',').map(g=>g.trim()).filter(Boolean).map(g=>`<span>${escapeHtml(g)}</span>`).join('')}
+          ${item.year ? `<span class="k44-year">${escapeHtml(item.year)}</span>` : ''}
+        </div>
         <div style="display:flex;gap:5px;margin-top:10px;flex-wrap:wrap">
           <button class="chip" style="padding:5px 8px;font-size:10px" onclick="event.stopPropagation();toggleLibrary(${catalog.indexOf(item)},'favorites')">♥ Любимое</button>
           <button class="chip" style="padding:5px 8px;font-size:10px" onclick="event.stopPropagation();toggleLibrary(${catalog.indexOf(item)},'planned')">＋ В планах</button>
@@ -2438,6 +2459,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         <div class="anime-detail-poster">${item.poster ? `<img src="${esc(item.poster)}" referrerpolicy="no-referrer" style="width:100%;height:100%;object-fit:cover;display:block" alt="">` : posterSVG(item.h1,item.h2,item.sym)}</div>
         <div class="anime-detail-main">
           <h2>${esc(item.title)}</h2>
+        ${item.alternate_title_en ? `<div class="k44-alt-title">${esc(item.alternate_title_en)}</div>` : ''}
           <div class="anime-meta">
             <span class="chip">★ ${Number(item.rating||0).toFixed(1)}${item.ratingCount ? ` · ${item.ratingCount} оценок` : ' · 0 оценок'}</span>
             <span class="chip">${esc(item.genre)}</span>
@@ -3144,7 +3166,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     const fallback=localCatalog.find(y=>String(y.title)===String(x.title)) || {};
     return {
       ...fallback,
-      id:x.id,title:x.title,description:x.description||'',genre:x.genre||'',
+      id:x.id,title:x.title,alternate_title_en:x.alternate_title_en||x.alt_title||'',description:x.description||'',genre:x.genre||'',
       year:x.year||'',status:x.status||'',tags:Array.isArray(x.tags)?x.tags:[],
       poster:x.poster||fallback.poster||'',totalEpisodes:x.total_episodes||fallback.totalEpisodes||24,
       rating:0,ratingCount:0
@@ -4909,6 +4931,181 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   window.addEventListener('load',()=>setTimeout(()=>{patchSave();patchEditButtons();renderGenres()},300));
   const p=document.getElementById('profile-modal');
   if(p)new MutationObserver(()=>setTimeout(()=>{patchSave();patchEditButtons();renderGenres()},10))
+    .observe(p,{subtree:true,childList:true,attributes:true});
+})();
+</script>
+
+<script>
+/* KUROSHI v44 — definitive anime editor/save */
+(function(){
+  const adminRoot=()=>document.querySelector('#profile-modal.k-admin-open .profile-content');
+  const el=id=>{
+    const r=adminRoot();
+    return r?.querySelector('#'+CSS.escape(id)) || document.getElementById(id);
+  };
+  const value=id=>String(el(id)?.value ?? '');
+
+  function parseGenres(){
+    return value('admin-anime-genre').split(',')
+      .map(x=>x.trim()).filter(Boolean)
+      .filter((x,i,a)=>a.findIndex(y=>y.toLowerCase()===x.toLowerCase())===i);
+  }
+
+  async function ensureAdmin(){
+    try{
+      const {data,error}=await window.sb.rpc('is_admin');
+      return !error && data===true;
+    }catch(e){return false}
+  }
+
+  function notice(text,ok=true){
+    const r=adminRoot(); if(!r)return;
+    let n=r.querySelector('#k44-save-notice');
+    if(!n){
+      n=document.createElement('div');
+      n.id='k44-save-notice';
+      n.style.cssText='margin-top:10px;padding:9px 12px;border-radius:9px;font-size:12px;background:var(--surface-2)';
+      const card=el('admin-anime-title')?.closest('.admin-card');
+      (card?.querySelector('.admin-row')||card)?.after(n);
+    }
+    n.textContent=text;
+    n.style.color=ok?'#8fe3a4':'#ff9ba6';
+  }
+
+  window.k44SaveAnime=async function(button){
+    if(!(await ensureAdmin())){notice('Ошибка: нет доступа к админ-панели',false);return}
+    const id=value('admin-anime-id').trim();
+    const title=value('admin-anime-title').trim();
+    if(!id||!title){notice('Заполните ID и название',false);return}
+
+    const row={
+      id,
+      title,
+      alternate_title_en:value('admin-anime-alt-title').trim(),
+      genre:parseGenres().join(', '),
+      year:Number(el('admin-anime-year')?.value)||null,
+      status:value('admin-anime-status').trim(),
+      poster:value('admin-anime-poster').trim(),
+      description:value('admin-anime-description'),
+      tags:[],
+      total_episodes:Number(el('admin-anime-episodes')?.value)||null,
+      rating:0
+    };
+
+    const old=button?.textContent||'Сохранить';
+    if(button){button.disabled=true;button.textContent='Сохраняем…'}
+    notice('Сохраняем…',true);
+
+    try{
+      const {error}=await window.sb.from('anime').upsert(row,{onConflict:'id'});
+      if(error)throw error;
+
+      notice('Изменения сохранены ✓',true);
+      if(typeof showToast==='function')showToast('Изменения сохранены ✓');
+
+      // Reload from database, not from the old local catalog.
+      if(window.refreshKuroshiCatalog)await window.refreshKuroshiCatalog();
+
+      // Keep the edited values on screen and rebuild only the admin list.
+      try{await window.k25LoadList?.()}catch(_){}
+      try{await window.k24LoadList?.()}catch(_){}
+    }catch(e){
+      console.error('v44 save:',e);
+      notice('Ошибка: '+(e?.message||String(e)),false);
+      if(typeof showToast==='function')showToast('Ошибка сохранения');
+    }finally{
+      if(button){button.disabled=false;button.textContent=old}
+    }
+  };
+
+  window.k44EditAnime=async function(id){
+    const {data,error}=await window.sb.from('anime').select('*').eq('id',id).maybeSingle();
+    if(error||!data){showToast(error?.message||'Аниме не найдено');return}
+    const set=(id,v)=>{const e=el(id);if(e)e.value=v??''};
+    set('admin-anime-id',data.id);
+    set('admin-anime-title',data.title);
+    set('admin-anime-alt-title',data.alternate_title_en||data.alt_title||'');
+    set('admin-anime-genre',data.genre||'');
+    set('admin-anime-year',data.year);
+    set('admin-anime-status',data.status);
+    set('admin-anime-poster',data.poster||'');
+    set('admin-anime-description',data.description||'');
+    set('admin-anime-rating',0);
+    if(typeof window.k43RenderGenres==='function')window.k43RenderGenres();
+    if(typeof window.k27Preview==='function')setTimeout(window.k27Preview,50);
+    showToast('Аниме загружено для редактирования');
+  };
+
+  function bind(){
+    const r=adminRoot();if(!r)return;
+    const card=el('admin-anime-title')?.closest('.admin-card');if(!card)return;
+
+    const save=[...card.querySelectorAll('button')].find(b=>{
+      const t=(b.textContent||'').replace(/\s+/g,' ').trim();
+      return t==='Сохранить' || t==='Сохранено ✓' || t==='Сохраняем…';
+    });
+
+    if(save && save.dataset.k44!=='1'){
+      const fresh=save.cloneNode(true);
+      fresh.dataset.k44='1';
+      fresh.type='button';
+      fresh.removeAttribute('onclick');
+      fresh.onclick=e=>{
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        window.k44SaveAnime(fresh);
+      };
+      save.replaceWith(fresh);
+    }
+
+    r.querySelectorAll('button').forEach(btn=>{
+      if((btn.textContent||'').trim()==='Изменить'){
+        const oc=btn.getAttribute('onclick')||'';
+        const m=oc.match(/['"]([^'"]+)['"]/);
+        if(m && btn.dataset.k44edit!=='1'){
+          btn.dataset.k44edit='1';
+          btn.removeAttribute('onclick');
+          btn.onclick=e=>{
+            e.preventDefault();e.stopImmediatePropagation();
+            window.k44EditAnime(m[1]);
+          };
+        }
+      }
+    });
+  }
+
+  // Ensure the fields are created in the dynamic admin form even if older form
+  // markup overwrites the original v43 additions.
+  function ensureFields(){
+    const r=adminRoot(); if(!r)return;
+    const title=el('admin-anime-title'); if(!title)return;
+    if(!el('admin-anime-alt-title')){
+      const x=document.createElement('input');
+      x.id='admin-anime-alt-title';
+      x.className='field-input';
+      x.placeholder='Альтернативное название на английском';
+      title.after(x);
+    }
+    const genre=el('admin-anime-genre');
+    if(genre && !r.querySelector('#k44-genres-hint')){
+      const h=document.createElement('div');
+      h.id='k44-genres-hint';
+      h.style.cssText='font-size:11px;color:var(--text-faint);margin:4px 0 8px';
+      h.textContent='Можно указать несколько жанров через запятую';
+      genre.after(h);
+    }
+  }
+
+  const oldOpen=window.openAdmin;
+  window.openAdmin=async function(){
+    if(oldOpen)await oldOpen();
+    setTimeout(()=>{ensureFields();bind()},80);
+    setTimeout(()=>{ensureFields();bind()},350);
+  };
+
+  window.addEventListener('load',()=>setTimeout(()=>{ensureFields();bind()},300));
+  const p=document.getElementById('profile-modal');
+  if(p)new MutationObserver(()=>setTimeout(()=>{ensureFields();bind()},15))
     .observe(p,{subtree:true,childList:true,attributes:true});
 })();
 </script>
