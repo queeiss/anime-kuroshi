@@ -840,6 +840,11 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 .k36-poster-clear{color:#ff8a98!important;border-color:rgba(255,80,100,.4)!important}
 .k36-admin-state{font-size:12px;color:var(--text-faint);margin-bottom:12px}
 </style>
+
+<style>
+/* KUROSHI v37 — persistent admin route */
+#profile-modal.k-admin-open .k12-admin-shell{display:block!important}
+</style>
 </head>
 <body>
 
@@ -4861,6 +4866,105 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     .observe(p,{subtree:true,childList:true,attributes:true});
 
   window.addEventListener('load',()=>setTimeout(injectFixes,300));
+})();
+</script>
+
+<script>
+/* KUROSHI v37 — admin state is stored in the URL, so returning to/reloading the tab
+   restores the exact admin view instead of the normal profile. */
+(function(){
+  const ADMIN_HASH='#admin';
+
+  function markAdmin(){
+    try{
+      sessionStorage.setItem('kuroshi_admin_route','1');
+      localStorage.setItem('kuroshi_admin_route','1');
+      if(location.hash!==ADMIN_HASH){
+        history.replaceState(null,'',location.pathname+location.search+ADMIN_HASH);
+      }
+    }catch(e){}
+  }
+
+  function clearAdmin(){
+    try{
+      sessionStorage.removeItem('kuroshi_admin_route');
+      localStorage.removeItem('kuroshi_admin_route');
+      if(location.hash===ADMIN_HASH){
+        history.replaceState(null,'',location.pathname+location.search);
+      }
+    }catch(e){}
+  }
+
+  async function isAdmin(){
+    try{
+      if(!window.sb)return false;
+      const {data,error}=await window.sb.rpc('is_admin');
+      return !error && data===true;
+    }catch(e){return false}
+  }
+
+  const previousOpen=window.openAdmin;
+  window.openAdmin=async function(){
+    if(previousOpen) await previousOpen();
+    markAdmin();
+    // Re-apply after the dynamic profile/admin DOM is rendered.
+    setTimeout(()=>markAdmin(),50);
+    setTimeout(()=>markAdmin(),250);
+  };
+
+  const previousClose=window.closeAdmin;
+  window.closeAdmin=function(){
+    clearAdmin();
+    if(previousClose) previousClose();
+  };
+
+  async function restoreAdminRoute(){
+    if(location.hash!==ADMIN_HASH &&
+       sessionStorage.getItem('kuroshi_admin_route')!=='1' &&
+       localStorage.getItem('kuroshi_admin_route')!=='1') return;
+
+    if(!(await isAdmin())) {
+      clearAdmin();
+      return;
+    }
+
+    try{
+      sessionStorage.setItem('kuroshi_admin_route','1');
+      localStorage.setItem('kuroshi_admin_route','1');
+      if(location.hash!==ADMIN_HASH){
+        history.replaceState(null,'',location.pathname+location.search+ADMIN_HASH);
+      }
+
+      const profile=document.getElementById('profile-modal');
+      if(profile && (profile.classList.contains('hidden') || !profile.classList.contains('k-admin-open'))){
+        // Open the profile first; the existing admin function will replace its content.
+        if(typeof openProfileModal==='function') openProfileModal();
+      }
+
+      setTimeout(async()=>{
+        try{
+          if(typeof window.openAdmin==='function') await window.openAdmin();
+        }catch(e){console.error(e)}
+      },180);
+
+      setTimeout(()=>{
+        try{
+          if(typeof window.k25LoadList==='function') window.k25LoadList();
+          if(typeof window.k24LoadList==='function') window.k24LoadList();
+          if(typeof window.k21RenderAnimeList==='function') window.k21RenderAnimeList();
+        }catch(e){}
+      },500);
+    }catch(e){console.error('KUROSHI admin restore:',e)}
+  }
+
+  // Browser tab can be restored from cache or fully reloaded.
+  window.addEventListener('pageshow',()=>setTimeout(restoreAdminRoute,80));
+  window.addEventListener('load',()=>setTimeout(restoreAdminRoute,120));
+
+  // If the hash is changed manually/back-forward, keep the UI in sync.
+  window.addEventListener('hashchange',()=>{
+    if(location.hash===ADMIN_HASH) setTimeout(restoreAdminRoute,50);
+  });
 })();
 </script>
 </body>
