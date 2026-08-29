@@ -1674,6 +1674,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       </div>
       <div class="profile-tabs">
         ${lists.map(([key,label])=>`<button class="profile-tab ${tab===key?'active':''}" onclick="renderProfileModal('${key}')">${label} (${(user.library?.[key]||[]).length})</button>`).join('')}
+        <button class="profile-tab" onclick="openFriendRequests()">Друзья</button>
         <button class="profile-tab ${tab==='settings'?'active':''}" onclick="renderProfileModal('settings')">Настройки</button>
       </div>
       ${tab!=='settings' && (user.bio || user.telegram || user.vk || user.instagram) ? `
@@ -1751,10 +1752,10 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       const freshBtn=document.getElementById('profile-save-btn');
       if(freshBtn){
         freshBtn.disabled=true;
-        freshBtn.textContent='✓ Изменения применены';
+        freshBtn.textContent='Изменения применены';
         setTimeout(()=>{freshBtn.disabled=false;freshBtn.textContent='Сохранить изменения';},1800);
       }
-      showToast('✓ Изменения применены');
+      showToast('Изменения применены');
     }catch(err){
       console.error(err);
       if(btn){btn.disabled=false;btn.textContent='Сохранить изменения';}
@@ -1848,20 +1849,32 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
     users.forEach(u=>{
       const div=document.createElement('div');
-      div.className='user-row'+(me && String(me.id)===String(u.id)?' k16-me':'');
+      const isMe=!!(me && String(me.id)===String(u.id));
+      div.className='user-row'+(isMe?' k16-me':'');
+      div.dataset.userId=u.id;
       const avatar=u.avatar
         ? `<img src="${escapeHtml(u.avatar)}" alt="">`
         : escapeHtml((u.name||'П')[0].toUpperCase());
       div.innerHTML=`
         <div class="user-avatar">${avatar}</div>
         <div>
-          <div class="user-name">${escapeHtml(u.name)} ${me && String(me.id)===String(u.id)?'<span style="color:var(--violet-2);font-size:11px">· ты</span>':''}</div>
+          <div class="user-name">${escapeHtml(u.name)} ${isMe?'<span style="color:var(--violet-2);font-size:11px">· ты</span>':''}</div>
           <div class="user-date">Регистрация: ${formatDate(u.createdAt)}</div>
         </div>
         <div class="user-stat"><strong>LVL ${u.level}</strong><span>уровень</span></div>
         <div class="user-stat"><strong>${u.xp}</strong><span>XP</span></div>
-        <div class="level-badge">LVL ${u.level}</div>`;
+        <div class="level-badge">LVL ${u.level}</div>
+        <div class="k-user-actions"></div>`;
+      div.onclick=()=>{ if(!isMe) openUserProfile(u.id); else openProfileModal(); };
       wrap.appendChild(div);
+      const actions=div.querySelector('.k-user-actions');
+      if(isMe){
+        actions.innerHTML='<span style="font-size:11px;color:var(--text-faint)">Это вы</span>';
+      }else{
+        friendshipState(u.id)
+          .then(st=>actions.innerHTML=renderFriendAction(st,u))
+          .catch(err=>console.error('friend state',u.id,err));
+      }
     });
   }
 
@@ -2616,7 +2629,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     if(!adminModal)return;
     adminModal.classList.remove('hidden');
     adminModal.style.zIndex='4000';
-    document.getElementById('admin-status').innerHTML='<p style="color:var(--violet-2);font-size:12px">✓ Доступ администратора подтверждён</p>';
+    document.getElementById('admin-status').innerHTML='<p style="color:var(--violet-2);font-size:12px">Доступ администратора подтверждён</p>';
   };
   window.closeAdmin=()=>{
     const adminModal=document.getElementById('admin-modal');
@@ -5122,6 +5135,9 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   .k-request-head{display:flex;align-items:center;gap:11px}.k-request-actions{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
   .k-request-card .mini{width:42px;height:42px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,var(--violet),var(--magenta));color:#fff;font-weight:800;flex:none}
   .k-request-card .mini img{width:100%;height:100%;object-fit:cover}
+  .k-user-actions{position:absolute;right:18px;top:50%;transform:translateY(-50%) translateX(6px);opacity:0;pointer-events:none;transition:opacity .18s ease,transform .18s ease;display:flex;align-items:center}
+  .user-row:hover .k-user-actions{opacity:1;pointer-events:auto;transform:translateY(-50%) translateX(0)}
+  .k-user-actions .k-friend-btn{box-shadow:0 8px 24px rgba(0,0,0,.2);white-space:nowrap}
   .k-friends-empty{padding:32px 16px;text-align:center;color:var(--text-faint);border:1px dashed var(--line);border-radius:12px}
   @media(max-width:700px){.k-friend-summary{grid-template-columns:1fr 1fr}.k-friend-summary .k-friend-stat:last-child{grid-column:1/-1}}
 </style>
@@ -5236,10 +5252,10 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
   function renderFriendAction(state,u){
     if(state.state==='self') return '';
-    if(state.state==='friends') return `<button class="k-friend-btn danger" onclick="removeFriend('${esc(u.id)}');event.stopPropagation()">✓ В друзьях · удалить</button>`;
+    if(state.state==='friends') return `<button class="k-friend-btn danger" onclick="removeFriend('${esc(u.id)}');event.stopPropagation()">В друзьях · удалить</button>`;
     if(state.state==='outgoing') return `<button class="k-friend-btn" onclick="cancelFriendRequest('${esc(u.id)}');event.stopPropagation()">Заявка отправлена · отменить</button>`;
-    if(state.state==='incoming') return `<button class="k-friend-btn primary" onclick="openFriendRequests();event.stopPropagation()">📨 Ответить на заявку</button>`;
-    return `<button class="k-friend-btn primary" onclick="sendFriendRequest('${esc(u.id)}');event.stopPropagation()">＋ Добавить в друзья</button>`;
+    if(state.state==='incoming') return `<button class="k-friend-btn primary" onclick="openFriendRequests();event.stopPropagation()">Ответить на заявку</button>`;
+    return `<button class="k-friend-btn primary" onclick="sendFriendRequest('${esc(u.id)}');event.stopPropagation()">Добавить в друзья</button>`;
   }
 
   async function openUserProfile(id){
@@ -5327,7 +5343,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       const {data:allUsers}=await sb.rpc('get_public_profiles');
       const friendUsers=(allUsers||[]).filter(x=>friendIds.includes(x.id));
       content.innerHTML=`
-        <div class="profile-head"><div><div class="profile-title"><h2>👥 Друзья и заявки</h2><p>Управление друзьями и входящими заявками</p></div></div></div>
+        <div class="profile-head"><div><div class="profile-title"><h2>Друзья и заявки</h2><p>Управление друзьями и входящими заявками</p></div></div></div>
         <div class="k-friends-actions"><button class="k-friend-btn" onclick="openProfileModal()">← Мой профиль</button><button class="k-friend-btn" onclick="showPage('users');closeProfileModal()">Найти пользователей</button></div>
         <div class="k-friend-summary">
           <div class="k-friend-stat"><strong>${friendUsers.length}</strong><span>друзей</span></div>
@@ -5337,7 +5353,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         <h3 style="font-size:16px;margin-top:10px">Входящие заявки</h3>
         <div class="k-friend-list">${users.length?users.map(u=>{
           const req=incoming.find(r=>String(r.requester_id)===String(u.id));
-          return `<div class="k-request-card"><div class="k-request-head"><div class="mini">${avatarHtml(u)}</div><div style="flex:1"><strong>${esc(u.name)}</strong><div style="font-size:10.5px;color:var(--text-faint);margin-top:2px">LVL ${u.level} · ${u.xp} XP</div></div></div><div class="k-request-actions"><button class="k-friend-btn primary" onclick="acceptFriendRequest('${esc(req.id)}')">✓ Принять</button><button class="k-friend-btn danger" onclick="rejectFriendRequest('${esc(req.id)}')">✕ Отклонить</button><button class="k-friend-btn" onclick="openUserProfile('${esc(u.id)}')">Открыть профиль</button></div></div>`;
+          return `<div class="k-request-card"><div class="k-request-head"><div class="mini">${avatarHtml(u)}</div><div style="flex:1"><strong>${esc(u.name)}</strong><div style="font-size:10.5px;color:var(--text-faint);margin-top:2px">LVL ${u.level} · ${u.xp} XP</div></div></div><div class="k-request-actions"><button class="k-friend-btn primary" onclick="acceptFriendRequest('${esc(req.id)}')">Принять</button><button class="k-friend-btn danger" onclick="rejectFriendRequest('${esc(req.id)}')">✕ Отклонить</button><button class="k-friend-btn" onclick="openUserProfile('${esc(u.id)}')">Открыть профиль</button></div></div>`;
         }).join(''):`<div class="k-friends-empty">Новых заявок нет.</div>`}</div>
         <h3 style="font-size:16px;margin-top:24px">Мои друзья</h3>
         <div class="k-friend-list">${friendUsers.length?friendUsers.map(u=>`<div class="k-friend-row" onclick="openUserProfile('${esc(u.id)}')"><div class="mini">${avatarHtml(u)}</div><div class="meta"><strong>${esc(u.name)}</strong><span>LVL ${userLevel(Number(u.xp)||0)} · ${Number(u.xp)||0} XP</span></div><span style="color:var(--text-faint)">›</span></div>`).join(''):`<div class="k-friends-empty">Пока нет друзей. Откройте раздел «Пользователи» и добавьте кого-нибудь.</div>`}</div>`;
@@ -5359,53 +5375,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     }catch(e){console.error('friend alerts',e)}
   }
 
-  // Users directory: make each row openable and add the friend action.
-  const wrapUsers=window.renderUsers;
-  window.renderUsers=async function(){
-    await wrapUsers();
-    const wrap=document.getElementById('users-list');if(!wrap)return;
-    const me=await getMe();
-    [...wrap.children].forEach(row=>{
-      const nameEl=row.querySelector('.user-name');
-      if(!nameEl)return;
-      const raw=nameEl.textContent.replace('· ты','').trim();
-      const avatars=row.querySelector('.user-avatar');
-      // Prefer the user object stored by data attribute below; fall back to name matching only for already-rendered rows.
-      let id=row.dataset.userId;
-      if(id){
-        row.style.cursor='pointer';row.onclick=()=>openUserProfile(id);
-        let actions=row.querySelector('.k-user-actions');
-        if(!actions){actions=document.createElement('div');actions.className='k-user-actions';row.appendChild(actions)}
-        if(me && String(id)!==String(me.id)){
-          friendshipState(id).then(st=>actions.innerHTML=renderFriendAction(st,{id,name:raw})).catch(()=>{});
-        }
-      }
-    });
-    await loadFriendAlerts();
-  };
-
-  // Patch the original user row renderer by observing added rows and reading their names from the public directory.
-  const origUsersRender=document.querySelector ? null : null;
-  async function enhanceUsers(){
-    const wrap=document.getElementById('users-list');if(!wrap)return;
-    const {data}=await sb.rpc('get_public_profiles');
-    const byName=new Map((data||[]).map(u=>[String(u.name||'').trim().toLocaleLowerCase('ru'),u]));
-    [...wrap.children].forEach(row=>{
-      const name=row.querySelector('.user-name')?.textContent?.replace('· ты','').trim();
-      const u=byName.get(String(name||'').toLocaleLowerCase('ru'));
-      if(!u)return;
-      row.dataset.userId=u.id;row.style.cursor='pointer';row.onclick=()=>openUserProfile(u.id);
-      let actions=row.querySelector('.k-user-actions');
-      if(!actions){actions=document.createElement('div');actions.className='k-user-actions';actions.style.display='flex';actions.style.justifyContent='flex-end';actions.style.minWidth='150px';row.appendChild(actions)}
-      if(me && String(me.id)!==String(u.id)) friendshipState(u.id).then(st=>actions.innerHTML=renderFriendAction(st,u));
-      else if(me) actions.innerHTML='<span style="font-size:11px;color:var(--text-faint)">Это вы</span>';
-    });
-  }
-  const originalShowPage=window.showPage;
-  window.showPage=function(page){
-    originalShowPage(page);
-    if(page==='users')setTimeout(enhanceUsers,200);
-  };
+  // Users directory is rendered with friend actions directly by renderUsers above.
 
   // Clicking the notification bell opens friend requests when there are pending ones; otherwise preserves notifications.
   const oldOpen=window.openNotifications;
