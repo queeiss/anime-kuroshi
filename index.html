@@ -549,6 +549,47 @@
     .cw-list{grid-template-columns:repeat(2,1fr);}
   }
 </style>
+
+<style>
+/* KUROSHI v5 — anime detail page */
+.anime-detail-modal .modal{max-width:920px;padding:0;overflow:hidden}
+.anime-detail{display:grid;grid-template-columns:260px 1fr;min-height:520px}
+.anime-detail-poster{background:#111;display:flex;align-items:stretch}
+.anime-detail-poster svg{width:100%;height:100%;min-height:520px}
+.anime-detail-main{padding:32px}
+.anime-detail-main h2{font-size:34px;margin:0 0 8px}
+.anime-meta{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 18px}
+.anime-detail-desc{line-height:1.7;opacity:.82;margin-bottom:20px}
+.anime-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+.anime-action{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:inherit;border-radius:10px;padding:9px 13px;cursor:pointer}
+.anime-action:hover{background:rgba(255,255,255,.11)}
+.rating-box{padding:15px;border:1px solid rgba(255,255,255,.1);border-radius:14px;margin-bottom:18px}
+.rating-buttons{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
+.rating-buttons button{width:34px;height:34px;border:0;border-radius:8px;background:rgba(255,255,255,.08);color:inherit;cursor:pointer}
+.rating-buttons button.active{outline:2px solid #fff}
+.episodes-box{margin-top:18px}
+.episode-list{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}
+.episode-list button{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;border-radius:9px;padding:8px 11px;cursor:pointer}
+.episode-list button.watched{opacity:.65}
+.comments-box{margin-top:22px}
+.comment-form{display:flex;gap:8px;margin-top:10px}
+.comment-form textarea{flex:1;min-height:58px;resize:vertical}
+.comment-list{display:grid;gap:9px;margin-top:12px}
+.comment-item{padding:11px;border-radius:12px;background:rgba(255,255,255,.045)}
+.comment-item small{opacity:.55}
+.continue-item{padding:12px;border-radius:12px;background:rgba(255,255,255,.045);margin-bottom:8px}
+.continue-item span{display:block;opacity:.65;margin:4px 0 8px}
+.progress-track{height:5px;background:rgba(255,255,255,.1);border-radius:10px;overflow:hidden}
+.progress-track i{display:block;height:100%;background:currentColor}
+@media(max-width:720px){
+  .anime-detail{grid-template-columns:1fr}
+  .anime-detail-poster{max-height:310px}
+  .anime-detail-poster svg{min-height:310px}
+  .anime-detail-main{padding:22px}
+  .anime-detail-main h2{font-size:27px}
+}
+</style>
+
 </head>
 <body>
 
@@ -1372,6 +1413,8 @@
     {title:"Смех Ёкай", genre:"Комедия", year:2024, status:"Онгоинг", tags:["Ёкай","Повседневность"], rating:7.8, tag:"Новое", h1:45, h2:60, sym:"M70 200 Q150 260 230 200"}
   ];
 
+  window.__KUROSHI_CATALOG__ = catalog;
+
   const genreList = ["Сёнен","Сэйнэн","Фэнтези","Мистика","Романтика","Спорт","Экшн","Драма","Комедия"];
   const yearList = [2026,2025,2024,2023,2022,2021,2020,2019];
   const statusList = ["Онгоинг","Завершён","Анонс"];
@@ -1382,6 +1425,8 @@
   function buildCard(item){
     const card = document.createElement('div');
     card.className='card';
+    card.style.cursor='pointer';
+    card.onclick=()=>openAnimeDetail(catalog.indexOf(item));
     card.innerHTML = `
       <div class="art">
         ${posterSVG(item.h1, item.h2, item.sym)}
@@ -1827,6 +1872,152 @@
     const c = document.querySelector('[data-continue-watching]');
     if (c) window.KuroshiV4.continueWatching(c);
   });
+})();
+</script>
+
+
+<div class="overlay hidden anime-detail-modal" id="anime-detail-modal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeAnimeDetail()">✕</button>
+    <div id="anime-detail-content"></div>
+  </div>
+</div>
+
+
+<script>
+/* KUROSHI v5 — real anime detail interaction */
+(function(){
+  const catalogRef = () => window.__KUROSHI_CATALOG__ || [];
+  let activeAnime = null;
+
+  function esc(v){return String(v ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+
+  window.openAnimeDetail = async function(index){
+    const item = catalogRef()[index];
+    if(!item) return;
+    activeAnime = item;
+    const modal = document.getElementById('anime-detail-modal');
+    const content = document.getElementById('anime-detail-content');
+    modal.classList.remove('hidden');
+
+    const total = item.totalEpisodes || 24;
+    const tags = (item.tags || []).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+    content.innerHTML = `
+      <div class="anime-detail">
+        <div class="anime-detail-poster">${posterSVG(item.h1,item.h2,item.sym)}</div>
+        <div class="anime-detail-main">
+          <h2>${esc(item.title)}</h2>
+          <div class="anime-meta">
+            <span class="chip">★ ${esc(item.rating)}</span>
+            <span class="chip">${esc(item.genre)}</span>
+            <span class="chip">${esc(item.year)}</span>
+            <span class="chip">${esc(item.status)}</span>
+            ${tags}
+          </div>
+          <p class="anime-detail-desc">${esc(item.description || 'Подробное описание этого аниме скоро появится в KUROSHI.')}</p>
+
+          <div class="anime-actions">
+            <button class="anime-action" onclick="openEpisode(1)">▶ Смотреть</button>
+            <button class="anime-action" onclick="toggleLibrary(${catalogRef().indexOf(item)},'favorites')">♥ Любимое</button>
+            <button class="anime-action" onclick="toggleLibrary(${catalogRef().indexOf(item)},'planned')">＋ В планах</button>
+          </div>
+
+          <div class="rating-box">
+            <strong>Твоя оценка: <span id="my-rating">—</span></strong>
+            <div class="rating-buttons">
+              ${Array.from({length:10},(_,i)=>`<button onclick="rateActiveAnime(${i+1})" data-rate="${i+1}">${i+1}</button>`).join('')}
+            </div>
+          </div>
+
+          <div class="episodes-box">
+            <strong>Серии</strong>
+            <div class="episode-list">
+              ${Array.from({length:total},(_,i)=>`<button id="ep-${i+1}" onclick="openEpisode(${i+1})">${i+1}</button>`).join('')}
+            </div>
+          </div>
+
+          <div class="comments-box">
+            <strong>Комментарии</strong>
+            <div class="comment-form">
+              <textarea id="comment-input" maxlength="2000" placeholder="Напиши своё мнение..."></textarea>
+              <button class="anime-action" onclick="postActiveComment()">Отправить</button>
+            </div>
+            <div id="comment-list" class="comment-list"><small>Загрузка...</small></div>
+          </div>
+        </div>
+      </div>`;
+
+    try {
+      if(window.KuroshiV3){
+        const rating = await window.KuroshiV3.getRating(item);
+        document.getElementById('my-rating').textContent = rating ? rating + '/10' : '—';
+        if(rating){
+          const b=document.querySelector(`[data-rate="${rating}"]`);
+          if(b)b.classList.add('active');
+        }
+        const comments = await window.KuroshiV3.comments(item);
+        renderComments(comments);
+      }
+    } catch(e){ console.error(e); }
+  };
+
+  window.closeAnimeDetail = function(){
+    document.getElementById('anime-detail-modal')?.classList.add('hidden');
+    activeAnime = null;
+  };
+
+  window.rateActiveAnime = async function(value){
+    if(!activeAnime || !window.KuroshiV3) return;
+    try{
+      await window.KuroshiV3.rate(activeAnime,value);
+      document.getElementById('my-rating').textContent=value+'/10';
+      document.querySelectorAll('.rating-buttons button').forEach(b=>b.classList.toggle('active',Number(b.dataset.rate)===value));
+      if(typeof showToast==='function')showToast('Оценка сохранена ⭐');
+    }catch(e){if(typeof showToast==='function')showToast(e.message||'Войдите в аккаунт');}
+  };
+
+  window.postActiveComment = async function(){
+    if(!activeAnime || !window.KuroshiV3) return;
+    const input=document.getElementById('comment-input');
+    try{
+      await window.KuroshiV3.addComment(activeAnime,input.value);
+      input.value='';
+      const comments=await window.KuroshiV3.comments(activeAnime);
+      renderComments(comments);
+      if(typeof showToast==='function')showToast('Комментарий опубликован 💬');
+    }catch(e){if(typeof showToast==='function')showToast(e.message||'Войдите в аккаунт');}
+  };
+
+  function renderComments(rows){
+    const box=document.getElementById('comment-list');
+    if(!box)return;
+    if(!rows.length){box.innerHTML='<small>Пока нет комментариев.</small>';return;}
+    box.innerHTML=rows.map(c=>`
+      <div class="comment-item">
+        <small>${new Date(c.created_at).toLocaleString('ru-RU')}</small>
+        <div style="margin-top:5px;white-space:pre-wrap">${esc(c.body)}</div>
+        <button class="anime-action" style="margin-top:8px;padding:5px 9px" onclick="likeComment(${c.id})">♥</button>
+      </div>`).join('');
+  }
+
+  window.likeComment=async function(id){
+    try{
+      await window.KuroshiV3.toggleCommentLike(id);
+      if(typeof showToast==='function')showToast('Готово ❤️');
+    }catch(e){if(typeof showToast==='function')showToast(e.message||'Войдите в аккаунт');}
+  };
+
+  window.openEpisode=async function(ep){
+    if(!activeAnime)return;
+    if(window.KuroshiV4){
+      await window.KuroshiV4.markEpisode(activeAnime,ep,activeAnime.totalEpisodes||24);
+    }else if(typeof markEpisodeWatched==='function'){
+      await markEpisodeWatched(activeAnime.title,ep);
+    }
+    const btn=document.getElementById('ep-'+ep);
+    if(btn)btn.classList.add('watched');
+    if(typeof showToast==='function')showToast(`Серия ${ep} сохранена ▶`);
+  };
 })();
 </script>
 
