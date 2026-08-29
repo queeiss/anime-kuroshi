@@ -775,6 +775,16 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 .k19-seed-btn{margin-top:10px;width:100%}
 </style>
 
+
+<style>
+/* KUROSHI v22 — reliable poster upload + preview */
+.k22-poster-box{margin-top:8px;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.k22-preview-wrap{display:flex;gap:12px;align-items:center;margin-top:10px}
+.k22-preview{width:76px;height:108px;border-radius:8px;object-fit:cover;background:var(--surface);border:1px solid var(--line);display:block}
+.k22-preview-empty{width:76px;height:108px;border-radius:8px;background:var(--surface);border:1px dashed var(--line);display:flex;align-items:center;justify-content:center;color:var(--text-faint);font-size:10px;text-align:center;padding:6px}
+.k22-url-status{font-size:11px;color:var(--text-faint);line-height:1.4}
+.k22-url-status.ok{color:#8fe3a4}.k22-url-status.bad{color:#ff9ba6}
+</style>
 </head>
 <body>
 
@@ -1138,7 +1148,17 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 <div id="k10-users" class="k10-panel"><div id="k10-users-list" class="k10-list"></div></div>
 
     <div class="admin-grid">
-      <div class="admin-card">
+      
+<div class="k21-manager">
+  <div class="k21-manager-head">
+    <h3>Все аниме в каталоге</h3>
+    <input id="k21-anime-search" class="k21-search" placeholder="Поиск по названию..." oninput="k21RenderAnimeList()">
+  </div>
+  <div id="k21-anime-list" class="k21-list">
+    <div class="k21-empty">Загрузка списка...</div>
+  </div>
+</div>
+<div class="admin-card">
         <h3>🎬 Аниме</h3>
         <input id="admin-anime-id" placeholder="ID, например midnight-blade">
         <input id="admin-anime-title" placeholder="Название">
@@ -1146,7 +1166,17 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         <input id="admin-anime-year" type="number" placeholder="Год">
         <input id="admin-anime-status" placeholder="Статус">
         <input id="admin-anime-rating" type="number" min="0" max="10" step=".1" placeholder="Рейтинг">
-        <input id="admin-anime-poster" placeholder="URL постера"><div style="margin-top:8px"><input class="k10-file" type="file" accept="image/*" onchange="k10UploadPoster(this)"><small id="k10-storage-status"></small></div>
+        <input id="admin-anime-poster" placeholder="URL постера">
+<div class="k22-poster-box">
+  <div class="k22-preview-wrap">
+    <div id="k22-poster-preview" class="k22-preview-empty">Предпросмотр<br>постера</div>
+    <div>
+      <div class="k22-url-status" id="k22-poster-status">Укажи URL или выбери файл.</div>
+      <button type="button" class="anime-action" style="margin-top:7px;padding:6px 9px" onclick="k22ClearPoster()">Очистить</button>
+    </div>
+  </div>
+</div>
+<div style="margin-top:8px"><input class="k10-file" type="file" accept="image/*" onchange="k10UploadPoster(this)"><small id="k10-storage-status"></small></div>
         <textarea id="admin-anime-description" placeholder="Описание"></textarea>
         <div class="admin-row">
   <button class="btn-primary" onclick="adminSaveAnime()">Сохранить</button>
@@ -3096,7 +3126,176 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   });
 })();
 </script>
+
+<script>
+/* KUROSHI v21 — explicit catalog list/editor */
+(function(){
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const jsq=v=>String(v??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+  async function adminOK(){
+    try{const {data,error}=await sb.rpc('is_admin');return !error&&data===true}
+    catch(e){return false}
+  }
+
+  window.k21RenderAnimeList=async function(){
+    const box=$('k21-anime-list'); if(!box)return;
+    box.innerHTML='<div class="k21-empty">Загрузка списка...</div>';
+    if(!(await adminOK())){box.innerHTML='<div class="k21-empty">Нет доступа</div>';return}
+    const q=($('k21-anime-search')?.value||'').trim().toLowerCase();
+    const {data,error}=await sb.from('anime')
+      .select('id,title,genre,year,status,poster,rating,total_episodes,created_at,updated_at')
+      .order('updated_at',{ascending:false});
+    if(error){box.innerHTML=`<div class="k21-empty">${esc(error.message)}</div>`;return}
+    const rows=(data||[]).filter(x=>!q||String(x.title||'').toLowerCase().includes(q));
+    if(!rows.length){box.innerHTML='<div class="k21-empty">В каталоге пока нет аниме.</div>';return}
+    box.innerHTML=rows.map(x=>`
+      <div class="k21-row" data-anime-row="${jsq(x.id)}">
+        ${x.poster?`<img class="k21-poster" referrerpolicy="no-referrer" src="${esc(x.poster)}" alt="">`:'<div class="k21-poster"></div>'}
+        <div class="k21-main">
+          <strong>${esc(x.title)}</strong>
+          <small>ID: ${esc(x.id)}</small>
+          <small>${esc(x.genre||'')} · ${esc(x.year||'')} · ${esc(x.status||'')} · ★ ${Number(x.rating||0).toFixed(1)}</small>
+        </div>
+        <div class="k21-actions">
+          <button onclick="k21EditAnime('${jsq(x.id)}')">Изменить</button>
+          <button class="danger" onclick="k21DeleteAnime('${jsq(x.id)}')">Удалить</button>
+        </div>
+      </div>
+    `).join('');
+  };
+
+  window.k21EditAnime=async function(id){
+    const {data,error}=await sb.from('anime').select('*').eq('id',id).maybeSingle();
+    if(error||!data){showToast(error?.message||'Аниме не найдено');return}
+    const set=(id,v)=>{const el=$(id);if(el)el.value=v??''};
+    set('admin-anime-id',data.id);set('admin-anime-title',data.title);set('admin-anime-genre',data.genre);
+    set('admin-anime-year',data.year);set('admin-anime-status',data.status);set('admin-anime-rating',0);
+    set('admin-anime-poster',data.poster);set('admin-anime-description',data.description);
+    document.querySelectorAll('.k21-row').forEach(r=>r.classList.remove('k21-editing'));
+    document.querySelector(`[data-anime-row="${CSS.escape(id)}"]`)?.classList.add('k21-editing');
+    $('admin-anime-title')?.focus();
+    showToast('Аниме загружено для редактирования');
+  };
+
+  window.k21DeleteAnime=async function(id){
+    if(!(await adminOK()))return showToast('Нет доступа');
+    const row=document.querySelector(`[data-anime-row="${CSS.escape(id)}"]`);
+    const title=row?.querySelector('.k21-main strong')?.textContent||id;
+    if(!confirm(`Удалить «${title}» из каталога?`))return;
+    const {error}=await sb.from('anime').delete().eq('id',id);
+    if(error){showToast('Ошибка: '+error.message);return}
+    const f=$('admin-anime-id'); if(f?.value===id){
+      ['admin-anime-id','admin-anime-title','admin-anime-genre','admin-anime-year','admin-anime-status','admin-anime-poster','admin-anime-description'].forEach(i=>{if($(i))$(i).value='';});
+    }
+    await k21RenderAnimeList();
+    if(window.refreshKuroshiCatalog)await window.refreshKuroshiCatalog();
+    showToast('Аниме удалено ✓');
+  };
+
+  // Make the save button use database-backed publishing/update, preserving ratings as aggregate data.
+  window.k21SaveAnime=async function(){
+    if(!(await adminOK()))return showToast('Нет доступа');
+    const id=$('admin-anime-id')?.value.trim();
+    const title=$('admin-anime-title')?.value.trim();
+    if(!id||!title)return showToast('Заполните ID и название');
+    const row={
+      id,title,
+      genre:$('admin-anime-genre')?.value.trim()||'',
+      year:Number($('admin-anime-year')?.value)||null,
+      status:$('admin-anime-status')?.value.trim()||'',
+      poster:$('admin-anime-poster')?.value.trim()||'',
+      description:$('admin-anime-description')?.value.trim()||'',
+      rating:0
+    };
+    const {error}=await sb.from('anime').upsert(row,{onConflict:'id'});
+    if(error){showToast('Ошибка: '+error.message);return}
+    await k21RenderAnimeList();
+    if(window.refreshKuroshiCatalog)await window.refreshKuroshiCatalog();
+    showToast('Аниме сохранено в каталоге ✓');
+  };
+
+  window.addEventListener('load',()=>{
+    const modal=$('admin-modal');
+    if(modal){
+      new MutationObserver(()=>{
+        if(!modal.classList.contains('hidden'))setTimeout(k21RenderAnimeList,50);
+      }).observe(modal,{attributes:true});
+    }
+  });
+})();
+</script>
+
+<script>
+/* KUROSHI v22 — poster preview/upload reliability */
+(function(){
+  const $=id=>document.getElementById(id);
+  function status(text,cls){
+    const s=$('k22-poster-status'); if(!s)return;
+    s.textContent=text;s.className='k22-url-status '+(cls||'');
+  }
+  window.k22PreviewPoster=function(url){
+    const wrap=$('k22-poster-preview'); if(!wrap)return;
+    const value=String(url||'').trim();
+    if(!value){
+      wrap.className='k22-preview-empty';
+      wrap.innerHTML='Предпросмотр<br>постера';
+      status('Укажи URL или выбери файл.');
+      return;
+    }
+    wrap.className='k22-preview';
+    wrap.innerHTML='';
+    const img=new Image();
+    img.referrerPolicy='no-referrer';
+    img.onload=()=>{wrap.replaceChildren(img);img.style.width='100%';img.style.height='100%';img.style.objectFit='cover';status('Постер доступен ✓','ok');};
+    img.onerror=()=>{
+      wrap.className='k22-preview-empty';
+      wrap.innerHTML='Изображение<br>недоступно';
+      status('Ссылка не открывает изображение. Загрузите файл с устройства.','bad');
+    };
+    img.src=value;
+  };
+  window.k22ClearPoster=function(){
+    const i=$('admin-anime-poster');if(i)i.value='';
+    k22PreviewPoster('');
+  };
+
+  // Preview external URL as the admin types.
+  document.addEventListener('input',e=>{
+    if(e.target?.id==='admin-anime-poster'){
+      clearTimeout(window.__k22PosterTimer);
+      window.__k22PosterTimer=setTimeout(()=>k22PreviewPoster(e.target.value),300);
+    }
+  });
+
+  // Wrap the existing file uploader so the preview updates after upload.
+  const original=window.k10UploadPoster;
+  if(original){
+    window.k10UploadPoster=async function(input){
+      await original(input);
+      k22PreviewPoster($('admin-anime-poster')?.value||'');
+    };
+  }
+
+  // After edit fills the poster URL, show its preview too.
+  const oldEdit=window.k21EditAnime;
+  if(oldEdit){
+    window.k21EditAnime=async function(id){
+      const result=await oldEdit(id);
+      setTimeout(()=>k22PreviewPoster($('admin-anime-poster')?.value||''),50);
+      return result;
+    };
+  }
+})();
+</script>
 </body>
+
+<script>
+window.adminSaveAnime=function(){
+  return window.k21SaveAnime ? window.k21SaveAnime() : null;
+};
+</script>
 </html>
 
 <script>
