@@ -734,6 +734,23 @@
 }
 .k13-logout:hover{background:rgba(255,90,110,.08);border-color:#ff6f82}
 </style>
+
+<style>
+.k16-my-level{
+  display:flex;align-items:center;justify-content:space-between;gap:14px;
+  padding:14px 16px;margin-bottom:18px;border:1px solid var(--line);
+  border-radius:14px;background:var(--surface);
+}
+.k16-my-level strong{font-size:15px}
+.k16-my-level span{font-size:12px;color:var(--text-faint)}
+.k16-me-badge{
+  display:inline-flex;align-items:center;gap:6px;padding:6px 10px;
+  border-radius:999px;background:linear-gradient(120deg,var(--violet),var(--magenta));
+  color:#fff;font-size:11px;font-weight:800;white-space:nowrap;
+}
+html[data-theme="mono"] .k16-me-badge{color:#000}
+.user-row.k16-me{border-color:var(--violet);box-shadow:0 0 0 1px var(--violet)}
+</style>
 </head>
 <body>
 
@@ -934,6 +951,7 @@
           <option value="name">По имени</option>
         </select>
       </div>
+      <div id="users-my-level" class="k16-my-level hidden"></div>
       <div id="users-list" class="users-list"></div>
       <div id="users-empty" class="users-empty hidden">Пользователи не найдены.</div>
     </section>
@@ -1522,6 +1540,7 @@
     const sort=document.getElementById('users-sort')?.value||'newest';
     const wrap=document.getElementById('users-list');
     const empty=document.getElementById('users-empty');
+    const mine=document.getElementById('users-my-level');
     if(!wrap || !empty)return;
 
     wrap.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-faint)">Загрузка пользователей…</div>';
@@ -1537,14 +1556,36 @@
         avatar:u.avatar||'',
         createdAt:u.created_at,
         xp:Number(u.xp)||0,
-        level:Number(u.level)||userLevel(Number(u.xp)||0)
+        level:userLevel(Number(u.xp)||0)
       }));
     }catch(error){
       console.error('Users directory error:',error);
       wrap.innerHTML='';
       empty.textContent='Не удалось загрузить пользователей.';
       empty.classList.remove('hidden');
+      mine?.classList.add('hidden');
       return;
+    }
+
+    let me=null;
+    try{
+      const {data:{user}}=await sb.auth.getUser();
+      if(user) me=users.find(u=>String(u.id)===String(user.id)) || null;
+    }catch(e){}
+
+    // Always show the current user's actual level/XP above the directory.
+    if(mine){
+      if(me){
+        mine.classList.remove('hidden');
+        mine.innerHTML=`
+          <div>
+            <strong>Твой текущий уровень: ${me.level}</strong>
+            <span> · ${me.xp} XP</span>
+          </div>
+          <span class="k16-me-badge">Ты · LVL ${me.level}</span>`;
+      }else{
+        mine.classList.add('hidden');
+      }
     }
 
     const now=Date.now();
@@ -1574,17 +1615,17 @@
 
     users.forEach(u=>{
       const div=document.createElement('div');
-      div.className='user-row';
+      div.className='user-row'+(me && String(me.id)===String(u.id)?' k16-me':'');
       const avatar=u.avatar
         ? `<img src="${escapeHtml(u.avatar)}" alt="">`
         : escapeHtml((u.name||'П')[0].toUpperCase());
       div.innerHTML=`
         <div class="user-avatar">${avatar}</div>
         <div>
-          <div class="user-name">${escapeHtml(u.name)}</div>
+          <div class="user-name">${escapeHtml(u.name)} ${me && String(me.id)===String(u.id)?'<span style="color:var(--violet-2);font-size:11px">· ты</span>':''}</div>
           <div class="user-date">Регистрация: ${formatDate(u.createdAt)}</div>
         </div>
-        <div class="user-stat"><strong>${u.level}</strong><span>уровень</span></div>
+        <div class="user-stat"><strong>LVL ${u.level}</strong><span>уровень</span></div>
         <div class="user-stat"><strong>${u.xp}</strong><span>XP</span></div>
         <div class="level-badge">LVL ${u.level}</div>`;
       wrap.appendChild(div);
