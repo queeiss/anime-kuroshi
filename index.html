@@ -4597,210 +4597,6 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 })();
 </script>
 
-<script>
-/* KUROSHI v36 — final override: single admin state, reliable poster clearing and save */
-(function(){
-  const ADMIN_VIEW='kuroshi_admin_open_v36';
-  const ADMIN_TAB='kuroshi_admin_tab_v36';
-
-  const root=()=>document.querySelector('#profile-modal.k-admin-open .profile-content');
-  const field=id=>{
-    const r=root();
-    return r?.querySelector('#'+CSS.escape(id)) || document.getElementById(id);
-  };
-  const val=id=>String(field(id)?.value??'').trim();
-
-  function toast(m){if(typeof showToast==='function')showToast(m);}
-
-  async function isAdmin(){
-    try{
-      const {data,error}=await window.sb.rpc('is_admin');
-      return !error && data===true;
-    }catch(e){return false}
-  }
-
-  async function saveAnime(){
-    const r=root(); if(!r)return;
-    const button=r.querySelector('#k36-save-anime') || r.querySelector('[data-k36-save]');
-    if(button){button.disabled=true;button.textContent='Сохраняем…';}
-
-    try{
-      if(!(await isAdmin()))throw new Error('Нет доступа');
-      const id=val('admin-anime-id');
-      const title=val('admin-anime-title');
-      if(!id)throw new Error('Заполните ID аниме');
-      if(!title)throw new Error('Заполните название аниме');
-
-      const row={
-        id,title,
-        genre:val('admin-anime-genre'),
-        year:Number(field('admin-anime-year')?.value)||null,
-        status:val('admin-anime-status'),
-        poster:val('admin-anime-poster'), // empty string intentionally clears poster
-        description:val('admin-anime-description'),
-        tags:[],
-        total_episodes:Number(field('admin-anime-episodes')?.value)||null
-      };
-
-      const {error}=await sb.from('anime').upsert(row,{onConflict:'id'});
-      if(error)throw error;
-
-      localStorage.setItem(ADMIN_VIEW,'1');
-      toast('Изменения сохранены ✓');
-
-      // Refresh only the list, never replace the edit form.
-      try{await window.k25LoadList?.()}catch(e){}
-      try{await window.k24LoadList?.()}catch(e){}
-      try{await window.k21RenderAnimeList?.()}catch(e){}
-      try{await window.refreshKuroshiCatalog?.()}catch(e){}
-
-    }catch(e){
-      toast('Ошибка: '+(e?.message||String(e)));
-    }finally{
-      const b=root()?.querySelector('#k36-save-anime');
-      if(b){b.disabled=false;b.textContent='Сохранить';}
-    }
-  }
-
-  window.k36ClearPoster=async function(){
-    const id=val('admin-anime-id');
-    if(!id){toast('Сначала нажмите «Изменить» у аниме');return;}
-    if(!confirm('Удалить постер у этого аниме?'))return;
-    if(!(await isAdmin())){toast('Нет доступа');return;}
-
-    const {error}=await sb.from('anime').update({poster:''}).eq('id',id);
-    if(error){toast('Ошибка: '+error.message);return;}
-
-    const p=field('admin-anime-poster'); if(p)p.value='';
-    const prev=field('k27-poster-preview')||field('k22-poster-preview');
-    if(prev){prev.innerHTML='Нет<br>постера';prev.className='k22-preview-empty';}
-    const ps=field('k27-poster-status')||field('k22-poster-status');
-    if(ps){ps.textContent='Постер удалён ✓';ps.style.color='#8fe3a4';}
-    toast('Постер удалён ✓');
-
-    try{await window.k25LoadList?.()}catch(e){}
-    try{await window.refreshKuroshiCatalog?.()}catch(e){}
-  };
-
-  async function editAnime(id){
-    const {data,error}=await sb.from('anime').select('*').eq('id',id).maybeSingle();
-    if(error||!data){toast(error?.message||'Аниме не найдено');return;}
-    const set=(k,v)=>{const f=field(k);if(f)f.value=v??'';};
-    set('admin-anime-id',data.id);
-    set('admin-anime-title',data.title);
-    set('admin-anime-genre',data.genre);
-    set('admin-anime-year',data.year);
-    set('admin-anime-status',data.status);
-    set('admin-anime-poster',data.poster||'');
-    set('admin-anime-description',data.description);
-    set('admin-anime-rating',0);
-    if(typeof window.k27Preview==='function')setTimeout(window.k27Preview,50);
-    toast('Аниме загружено для редактирования');
-  };
-  window.k36EditAnime=editAnime;
-
-  function injectFixes(){
-    const r=root();if(!r)return;
-    const card=r.querySelector('#admin-anime-title')?.closest('.admin-card');
-    if(!card)return;
-
-    let save=card.querySelector('#k36-save-anime');
-    const old=save || [...card.querySelectorAll('button')].find(b=>(b.textContent||'').trim()==='Сохранить');
-    if(old && !save){
-      save=old.cloneNode(true);
-      save.id='k36-save-anime';
-      save.dataset.k36Save='1';
-      save.type='button';
-      save.removeAttribute('onclick');
-      old.replaceWith(save);
-    }
-    if(save && save.dataset.k36Bound!=='1'){
-      save.dataset.k36Bound='1';
-      save.onclick=e=>{e.preventDefault();e.stopImmediatePropagation();saveAnime();};
-    }
-
-    // Put a direct "Удалить постер" control immediately under the URL field.
-    let tools=card.querySelector('#k36-poster-tools');
-    if(!tools){
-      tools=document.createElement('div');
-      tools.id='k36-poster-tools';
-      tools.className='k36-poster-tools';
-      const p=card.querySelector('#admin-anime-poster');
-      if(p)p.after(tools);
-      tools.innerHTML='<button type="button" class="anime-action k36-poster-clear" onclick="k36ClearPoster()">Удалить постер из базы</button>';
-    }
-
-    // Replace all old edit buttons in the currently visible manager.
-    r.querySelectorAll('button').forEach(b=>{
-      const t=(b.textContent||'').trim();
-      if(t==='Изменить' && b.dataset.k36Edit!=='1'){
-        const onclick=b.getAttribute('onclick')||'';
-        const m=onclick.match(/['"]([^'"]+)['"]/);
-        if(m){
-          b.dataset.k36Edit='1';
-          b.removeAttribute('onclick');
-          b.onclick=()=>editAnime(m[1]);
-        }
-      }
-    });
-  }
-
-  function rememberAdmin(){
-    localStorage.setItem(ADMIN_VIEW,'1');
-    const tabs=root()?.querySelector('.k10-admin-tabs');
-    if(tabs){
-      const active=tabs.querySelector('.active');
-      const name=active?.dataset.k10Tab;
-      if(name)localStorage.setItem(ADMIN_TAB,name);
-    }
-  }
-
-  const oldOpen=window.openAdmin;
-  window.openAdmin=async function(){
-    if(oldOpen)await oldOpen();
-    localStorage.setItem(ADMIN_VIEW,'1');
-    setTimeout(injectFixes,50);
-    setTimeout(injectFixes,200);
-  };
-
-  // Never clear the admin state while merely switching browser tabs.
-  // Only closeAdmin explicitly exits the admin view.
-  const oldClose=window.closeAdmin;
-  window.closeAdmin=function(){
-    localStorage.removeItem(ADMIN_VIEW);
-    localStorage.removeItem(ADMIN_TAB);
-    if(oldClose)oldClose();
-  };
-
-  async function restore(){
-    if(localStorage.getItem(ADMIN_VIEW)!=='1')return;
-    const {data:{user}}=await sb.auth.getUser();
-    if(!user || !(await isAdmin()))return;
-
-    const p=document.getElementById('profile-modal');
-    if(!p)return;
-    if(!p.classList.contains('hidden') && p.classList.contains('k-admin-open')){
-      setTimeout(injectFixes,20);
-      return;
-    }
-    setTimeout(async()=>{
-      if(window.openAdmin)await window.openAdmin();
-    },80);
-  }
-
-  window.addEventListener('pageshow',restore);
-  document.addEventListener('visibilitychange',()=>{if(!document.hidden)restore()});
-
-  // Patch clear/save after the dynamically generated admin view appears.
-  const p=document.getElementById('profile-modal');
-  if(p)new MutationObserver(()=>setTimeout(injectFixes,10))
-    .observe(p,{subtree:true,childList:true,attributes:true});
-
-  window.addEventListener('load',()=>setTimeout(injectFixes,300));
-})();
-</script>
-
-
 <style>
 /* KUROSHI v39 — fresh page load always starts at normal site/profile state */
 </style>
@@ -4821,6 +4617,26 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
   // Never auto-open admin/profile on visibilitychange/pageshow/load.
   // Explicit clicks remain responsible for opening them.
+})();
+</script>
+
+<script>
+/* KUROSHI v41 — clean startup state */
+(function(){
+  // A fresh/reloaded page always starts from the normal site state.
+  // Profile/admin can only be opened by an explicit user action.
+  try{
+    sessionStorage.removeItem('kuroshi_admin_view_v1');
+    sessionStorage.removeItem('kuroshi_admin_open_v36');
+    sessionStorage.removeItem('kuroshi_admin_route');
+    localStorage.removeItem('kuroshi_admin_view_v1');
+    localStorage.removeItem('kuroshi_admin_open_v36');
+    localStorage.removeItem('kuroshi_admin_route');
+
+    if(location.hash==='#admin' || location.hash==='#profile'){
+      history.replaceState(null,'',location.pathname+location.search);
+    }
+  }catch(e){}
 })();
 </script>
 </body>
