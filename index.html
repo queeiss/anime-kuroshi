@@ -610,6 +610,83 @@
 .notify-item small{display:block;color:var(--text-faint);margin-top:4px}
 @media(max-width:700px){.admin-grid{grid-template-columns:1fr}.k-notify{width:34px;height:34px}}
 </style>
+
+<style>
+/* KUROSHI v8 — guaranteed visible notification/admin controls */
+#k-notify-btn{
+  display:flex!important;
+  flex:0 0 38px!important;
+  visibility:visible!important;
+  opacity:1!important;
+}
+#k-notify-btn svg{display:block!important}
+.k-admin-entry{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:100%;margin-top:18px;padding:13px 15px;border-radius:12px;
+  border:1px solid var(--line);background:var(--surface-2);color:var(--text);
+  cursor:pointer;font:inherit;text-align:left;
+}
+.k-admin-entry:hover{border-color:var(--violet-2)}
+.k-admin-entry span:last-child{opacity:.65}
+@media(max-width:700px){
+  #k-notify-btn{width:38px!important;height:38px!important}
+  .nav-right .search{display:none}
+}
+</style>
+<script>
+/* v8: attach controls after the actual DOM exists */
+(function(){
+  function addAdminEntry(){
+    const profile = document.getElementById('profile-modal');
+    if(!profile || profile.classList.contains('hidden')) return;
+    if(profile.querySelector('.k-admin-entry')) return;
+
+    // Put it below the profile tabs/content, but only display it to admins.
+    const target = profile.querySelector('.profile-content') || profile.querySelector('.modal');
+    if(!target) return;
+
+    const btn=document.createElement('button');
+    btn.className='k-admin-entry';
+    btn.innerHTML='<span>🛠️ Админ-панель</span><span>Управление KUROSHI →</span>';
+    btn.onclick=()=>window.openAdmin && window.openAdmin();
+    target.appendChild(btn);
+
+    if(window.isAdminCheck){
+      window.isAdminCheck().then(ok=>{if(!ok)btn.remove();}).catch(()=>btn.remove());
+    } else if(window.sb){
+      window.sb.rpc('is_admin').then(({data,error})=>{
+        if(error || !data) btn.remove();
+      });
+    }
+  }
+
+  function addNotifyFallback(){
+    const btn=document.getElementById('k-notify-btn');
+    if(btn) return;
+    const navRight=document.querySelector('.nav-right');
+    if(!navRight) return;
+    const b=document.createElement('button');
+    b.id='k-notify-btn';
+    b.className='k-notify';
+    b.title='Уведомления';
+    b.setAttribute('aria-label','Уведомления');
+    b.onclick=()=>window.openNotifications && window.openNotifications();
+    b.innerHTML='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"></path><path d="M10 21h4"></path></svg><span class="k-notify-badge hidden" id="k-notify-badge">0</span>';
+    navRight.insertBefore(b,navRight.firstChild);
+  }
+
+  window.addEventListener('load',()=>{
+    addNotifyFallback();
+    const profile=document.getElementById('profile-modal');
+    if(profile){
+      new MutationObserver(()=>setTimeout(addAdminEntry,50))
+        .observe(profile,{attributes:true,childList:true,subtree:true});
+    }
+    setInterval(addAdminEntry,1000);
+  });
+})();
+</script>
+
 </head>
 <body>
 
@@ -948,6 +1025,17 @@
     <div class="filter-title">Админ-панель KUROSHI</div>
     <p style="color:var(--text-faint);font-size:12px;margin-bottom:18px">Управление каталогом, сериями и новостями.</p>
     <div id="admin-status"></div>
+<div class="k10-admin-tabs">
+<button data-k10-tab="anime" onclick="k10Tab('anime')">🎬 Аниме</button>
+<button data-k10-tab="episodes" onclick="k10Tab('episodes')">📺 Серии</button>
+<button data-k10-tab="news" onclick="k10Tab('news')">📰 Новости</button>
+<button data-k10-tab="users" onclick="k10Tab('users')">👥 Пользователи</button>
+</div>
+<div id="k10-anime" class="k10-panel active"></div>
+<div id="k10-episodes" class="k10-panel"></div>
+<div id="k10-news" class="k10-panel"></div>
+<div id="k10-users" class="k10-panel"><div id="k10-users-list" class="k10-list"></div></div>
+
     <div class="admin-grid">
       <div class="admin-card">
         <h3>🎬 Аниме</h3>
@@ -957,9 +1045,9 @@
         <input id="admin-anime-year" type="number" placeholder="Год">
         <input id="admin-anime-status" placeholder="Статус">
         <input id="admin-anime-rating" type="number" min="0" max="10" step=".1" placeholder="Рейтинг">
-        <input id="admin-anime-poster" placeholder="URL постера">
+        <input id="admin-anime-poster" placeholder="URL постера"><div style="margin-top:8px"><input class="k10-file" type="file" accept="image/*" onchange="k10UploadPoster(this)"><small id="k10-storage-status"></small></div>
         <textarea id="admin-anime-description" placeholder="Описание"></textarea>
-        <div class="admin-row"><button class="btn-primary" onclick="adminSaveAnime()">Сохранить</button></div>
+        <div class="admin-row"><button class="btn-primary" onclick="adminSaveAnime()">Сохранить</button></div><div id="admin-anime-list" class="admin-list"></div>
       </div>
       <div class="admin-card">
         <h3>📺 Серия</h3>
@@ -967,14 +1055,14 @@
         <input id="admin-ep-number" type="number" placeholder="Номер серии">
         <input id="admin-ep-title" placeholder="Название серии">
         <input id="admin-ep-video" placeholder="URL видео">
-        <div class="admin-row"><button class="btn-primary" onclick="adminSaveEpisode()">Добавить серию</button></div>
+        <div class="admin-row"><button class="btn-primary" onclick="adminSaveEpisode()">Добавить серию</button></div><div id="admin-episode-list" class="admin-list"></div>
       </div>
       <div class="admin-card">
         <h3>📰 Новость</h3>
         <input id="admin-news-title" placeholder="Заголовок">
         <input id="admin-news-image" placeholder="URL изображения">
         <textarea id="admin-news-body" placeholder="Текст новости"></textarea>
-        <div class="admin-row"><button class="btn-primary" onclick="adminSaveNews()">Опубликовать</button></div>
+        <div class="admin-row"><button class="btn-primary" onclick="adminSaveNews()">Опубликовать</button></div><div id="admin-news-list" class="admin-list"></div>
       </div>
       <div class="admin-card">
         <h3>🔔 Уведомление пользователю</h3>
@@ -2243,6 +2331,195 @@
     if(window.sb) window.sb.auth.onAuthStateChange(()=>loadUnread());
     setTimeout(addAdminButton,800);
   });
+})();
+</script>
+
+<script>
+/* KUROSHI v9 — functional admin panel + notifications */
+(function(){
+  const $=id=>document.getElementById(id);
+  async function me(){ if(!window.sb)return null; const {data}=await sb.auth.getUser(); return data?.user||null; }
+  async function admin(){ try{const {data,error}=await sb.rpc('is_admin'); return !error&&data===true;}catch(e){return false;} }
+
+  window.openNotifications=async function(){
+    const m=$('notifications-modal'); if(!m)return;
+    m.classList.remove('hidden');
+    const box=$('notifications-list'); box.innerHTML='<p style="color:var(--text-faint)">Загрузка...</p>';
+    const u=await me();
+    if(!u){box.innerHTML='<p>Войдите в аккаунт, чтобы видеть уведомления.</p>';return;}
+    const {data,error}=await sb.from('notifications').select('*').eq('user_id',u.id).order('created_at',{ascending:false});
+    if(error){box.innerHTML='<p>Не удалось загрузить уведомления.</p>';return;}
+    if(!data?.length){box.innerHTML='<p style="color:var(--text-faint)">Уведомлений пока нет.</p>';return;}
+    box.innerHTML=data.map(n=>`<div class="notify-item ${n.is_read?'':'unread'}">
+      <strong>${esc(n.title)}</strong><div>${esc(n.body||'')}</div>
+      <small>${new Date(n.created_at).toLocaleString('ru-RU')}${n.link?` · <a href="${esc(n.link)}">Открыть</a>`:''}</small>
+    </div>`).join('');
+    updateBadge(data.filter(n=>!n.is_read).length);
+  };
+  window.closeNotifications=()=>$('notifications-modal')?.classList.add('hidden');
+
+  window.markNotificationsRead=async function(){
+    const u=await me(); if(!u)return;
+    await sb.from('notifications').update({is_read:true}).eq('user_id',u.id);
+    updateBadge(0); openNotifications();
+  };
+  async function refreshBadge(){
+    const u=await me(); if(!u)return updateBadge(0);
+    const {count}=await sb.from('notifications').select('id',{count:'exact',head:true}).eq('user_id',u.id).eq('is_read',false);
+    updateBadge(count||0);
+  }
+  function updateBadge(n){
+    const b=$('k-notify-badge'); if(!b)return;
+    b.textContent=n>99?'99+':n; b.classList.toggle('hidden',!n);
+  }
+
+  window.openAdmin=async function(){
+    if(!(await admin())){showToast('Доступ запрещён');return;}
+    $('admin-modal')?.classList.remove('hidden');
+    await loadAdminLists();
+  };
+  window.closeAdmin=()=>$('admin-modal')?.classList.add('hidden');
+
+  function status(msg,ok=true){
+    const el=$('admin-status'); if(el)el.innerHTML=`<div style="padding:9px;border-radius:9px;margin-bottom:12px;background:${ok?'var(--surface-2)':'rgba(255,60,90,.12)'}">${esc(msg)}</div>`;
+  }
+  window.adminSaveAnime=async function(){
+    if(!(await admin()))return status('Нет прав администратора',false);
+    const row={
+      id:$('admin-anime-id').value.trim(), title:$('admin-anime-title').value.trim(),
+      genre:$('admin-anime-genre').value.trim(), year:Number($('admin-anime-year').value)||null,
+      status:$('admin-anime-status').value.trim(), rating:Number($('admin-anime-rating').value)||0,
+      poster:$('admin-anime-poster').value.trim(), description:$('admin-anime-description').value.trim()
+    };
+    if(!row.id||!row.title)return status('Укажите ID и название',false);
+    const {error}=await sb.from('anime').upsert(row);
+    status(error?error.message:'Аниме сохранено ✓',!error);
+    if(!error)loadAdminLists();
+  };
+  window.adminSaveEpisode=async function(){
+    if(!(await admin()))return status('Нет прав администратора',false);
+    const row={
+      anime_id:$('admin-ep-anime').value.trim(), episode_number:Number($('admin-ep-number').value),
+      title:$('admin-ep-title').value.trim(), video_url:$('admin-ep-video').value.trim()
+    };
+    if(!row.anime_id||!row.episode_number)return status('Укажите ID аниме и номер серии',false);
+    const {error}=await sb.from('episodes').upsert(row,{onConflict:'anime_id,episode_number'});
+    status(error?error.message:'Серия сохранена ✓',!error);
+  };
+  window.adminSaveNews=async function(){
+    if(!(await admin()))return status('Нет прав администратора',false);
+    const row={title:$('admin-news-title').value.trim(),image:$('admin-news-image').value.trim(),body:$('admin-news-body').value.trim()};
+    if(!row.title)return status('Укажите заголовок новости',false);
+    const {error}=await sb.from('news').insert(row);
+    status(error?error.message:'Новость опубликована ✓',!error);
+    if(!error){$('admin-news-title').value='';$('admin-news-image').value='';$('admin-news-body').value='';}
+  };
+  window.adminSendNotification=async function(){
+    if(!(await admin()))return status('Нет прав администратора',false);
+    const row={user_id:$('admin-notify-user').value.trim(),title:$('admin-notify-title').value.trim(),body:$('admin-notify-body').value.trim(),link:$('admin-notify-link').value.trim()};
+    if(!row.user_id||!row.title)return status('Укажите UUID пользователя и заголовок',false);
+    const {error}=await sb.from('notifications').insert(row);
+    status(error?error.message:'Уведомление отправлено ✓',!error);
+  };
+
+  async function loadAdminLists(){
+    const a=$('admin-anime-list'), e=$('admin-episode-list'), n=$('admin-news-list');
+    if(a){
+      const {data}=await sb.from('anime').select('id,title,year').order('updated_at',{ascending:false}).limit(50);
+      a.innerHTML=(data||[]).map(x=>`<div class="admin-list-item"><span>${esc(x.title)} <small>${esc(x.id)}</small></span><button onclick="fillAnime('${jsesc(x.id)}')">Изменить</button></div>`).join('')||'<small>Пока пусто</small>';
+    }
+    if(e){
+      const {data}=await sb.from('episodes').select('id,anime_id,episode_number,title').order('created_at',{ascending:false}).limit(50);
+      e.innerHTML=(data||[]).map(x=>`<div class="admin-list-item"><span>${esc(x.anime_id)} · серия ${x.episode_number}</span><span>${esc(x.title||'')}</span></div>`).join('')||'<small>Пока пусто</small>';
+    }
+    if(n){
+      const {data}=await sb.from('news').select('id,title,published_at').order('published_at',{ascending:false}).limit(20);
+      n.innerHTML=(data||[]).map(x=>`<div class="admin-list-item"><span>${esc(x.title)}</span><small>${new Date(x.published_at).toLocaleDateString('ru-RU')}</small></div>`).join('')||'<small>Пока пусто</small>';
+    }
+  }
+  window.fillAnime=async function(id){
+    const {data}=await sb.from('anime').select('*').eq('id',id).maybeSingle(); if(!data)return;
+    $('admin-anime-id').value=data.id||'';$('admin-anime-title').value=data.title||'';$('admin-anime-genre').value=data.genre||'';
+    $('admin-anime-year').value=data.year||'';$('admin-anime-status').value=data.status||'';$('admin-anime-rating').value=data.rating||0;
+    $('admin-anime-poster').value=data.poster||'';$('admin-anime-description').value=data.description||'';
+    status('Данные загружены для редактирования');
+  };
+  function jsesc(v){return String(v).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+  function esc(v){return String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
+
+  window.addEventListener('load',()=>{
+    refreshBadge();
+    if(window.sb)sb.auth.onAuthStateChange(()=>setTimeout(refreshBadge,200));
+  });
+})();
+</script>
+
+<style>
+/* KUROSHI v10 — storage + user/admin management */
+.k10-admin-tabs{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}
+.k10-admin-tabs button{padding:9px 12px;border:1px solid var(--line);background:var(--surface-2);color:var(--text);border-radius:9px;cursor:pointer}
+.k10-admin-tabs button.active{outline:2px solid var(--violet-2)}
+.k10-panel{display:none}.k10-panel.active{display:block}
+.k10-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.k10-grid .full{grid-column:1/-1}
+.k10-input,.k10-textarea{width:100%;box-sizing:border-box;padding:10px;border-radius:9px;border:1px solid var(--line);background:var(--surface);color:var(--text)}
+.k10-textarea{min-height:90px;resize:vertical}
+.k10-file{width:100%;padding:9px;border:1px dashed var(--line);border-radius:9px}
+.k10-list{display:grid;gap:8px;margin-top:14px}
+.k10-user{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border:1px solid var(--line);border-radius:10px}
+.k10-user small{opacity:.65}
+@media(max-width:700px){.k10-grid{grid-template-columns:1fr}.k10-grid .full{grid-column:auto}.k10-user{align-items:flex-start;flex-direction:column}}
+</style>
+<script>
+/* v10 helpers. Storage bucket must be named `posters`. */
+(function(){
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const $=id=>document.getElementById(id);
+  async function isAdmin(){try{const {data,error}=await sb.rpc('is_admin');return !error&&data===true}catch(e){return false}}
+  async function current(){const {data}=await sb.auth.getUser();return data?.user||null}
+
+  window.k10Tab=function(name){
+    document.querySelectorAll('.k10-panel').forEach(x=>x.classList.remove('active'));
+    document.querySelectorAll('.k10-admin-tabs button').forEach(x=>x.classList.remove('active'));
+    $('k10-'+name)?.classList.add('active');
+    document.querySelector(`[data-k10-tab="${name}"]`)?.classList.add('active');
+    if(name==='users')loadUsers();
+  };
+
+  window.k10UploadPoster=async function(input){
+    const u=await current(); if(!u||!(await isAdmin()))return;
+    const file=input.files?.[0]; if(!file)return;
+    const ext=(file.name.split('.').pop()||'jpg').toLowerCase();
+    const path=`${crypto.randomUUID()}.${ext}`;
+    const {error}=await sb.storage.from('posters').upload(path,file,{upsert:true,contentType:file.type});
+    if(error){$('k10-storage-status').textContent=error.message;return}
+    const {data}=sb.storage.from('posters').getPublicUrl(path);
+    $('admin-anime-poster').value=data.publicUrl;
+    $('k10-storage-status').textContent='Постер загружен ✓';
+  };
+
+  async function loadUsers(){
+    const box=$('k10-users-list'); if(!box)return;
+    box.innerHTML='<small>Загрузка...</small>';
+    /* auth.users intentionally cannot be read through the browser.
+       Use public.profiles for the user management list. */
+    const {data,error}=await sb.from('profiles').select('*').order('created_at',{ascending:false}).limit(100);
+    if(error){box.innerHTML='<small>Не удалось загрузить профили.</small>';return}
+    box.innerHTML=(data||[]).map(p=>`
+      <div class="k10-user">
+        <div><strong>${esc(p.username||p.name||'Без ника')}</strong><br><small>${esc(p.id||'')}</small></div>
+        <div><button class="anime-action" onclick="k10GrantXP('${esc(p.id)}')">+ XP</button></div>
+      </div>`).join('')||'<small>Пользователей пока нет.</small>';
+  }
+  window.k10GrantXP=async function(id){
+    const amount=Number(prompt('Сколько XP добавить?', '50'));
+    if(!Number.isFinite(amount)||!amount)return;
+    const {data}=await sb.from('profiles').select('xp').eq('id',id).maybeSingle();
+    const xp=Number(data?.xp)||0;
+    const {error}=await sb.from('profiles').update({xp:xp+amount}).eq('id',id);
+    if(typeof showToast==='function')showToast(error?error.message:'XP выдан ✓');
+    loadUsers();
+  };
 })();
 </script>
 </body>
