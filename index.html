@@ -698,6 +698,25 @@
 }
 </style>
 
+
+<style>
+/* KUROSHI v12 — admin is a view INSIDE the profile modal */
+#profile-modal.k-admin-open .modal-close{display:none!important}
+#profile-modal.k-admin-open .profile-content{
+  width:min(1180px,calc(100% - 28px))!important;
+  padding-top:28px!important;
+}
+.k12-admin-shell{
+  width:100%;min-height:calc(100vh - 56px);padding:20px 0 60px;
+}
+.k12-back{
+  display:inline-flex;align-items:center;gap:8px;margin-bottom:18px;
+  border:1px solid var(--line);background:var(--surface);
+  color:var(--text);border-radius:10px;padding:9px 13px;cursor:pointer;font:inherit;
+}
+.k12-title{font-family:'Bebas Neue',sans-serif;font-size:40px;letter-spacing:1px;margin-bottom:6px}
+.k12-sub{color:var(--text-faint);font-size:13px;margin-bottom:20px}
+</style>
 </head>
 <body>
 
@@ -2537,6 +2556,115 @@
     const {error}=await sb.from('profiles').update({xp:xp+amount}).eq('id',id);
     if(typeof showToast==='function')showToast(error?error.message:'XP выдан ✓');
     loadUsers();
+  };
+})();
+</script>
+
+<script>
+/* KUROSHI v12 — replace overlay admin with in-profile admin view */
+(function(){
+  async function k12IsAdmin(){
+    try{
+      const {data:{user}}=await window.sb.auth.getUser();
+      if(!user)return false;
+      const {data,error}=await window.sb.rpc('is_admin');
+      return !error && data===true;
+    }catch(e){return false}
+  }
+
+  function profileBox(){
+    return document.querySelector('#profile-modal .profile-content');
+  }
+
+  window.openAdmin = async function(){
+    if(!(await k12IsAdmin())){
+      if(typeof showToast==='function')showToast('Нет доступа к админ-панели');
+      return;
+    }
+    const profile=document.getElementById('profile-modal');
+    const box=profile?.querySelector('.profile-content');
+    if(!profile || !box)return;
+
+    profile.classList.remove('hidden');
+    profile.classList.add('k-admin-open');
+
+    box.innerHTML=`
+      <div class="k12-admin-shell">
+        <button class="k12-back" onclick="closeAdmin()">← Назад в профиль</button>
+        <div class="k12-title">Админ-панель KUROSHI</div>
+        <div class="k12-sub">Управление аниме, сериями, новостями и уведомлениями.</div>
+        <div id="admin-status"></div>
+
+        <div class="k10-admin-tabs">
+          <button data-k10-tab="anime" onclick="k10Tab('anime')">🎬 Аниме</button>
+          <button data-k10-tab="episodes" onclick="k10Tab('episodes')">📺 Серии</button>
+          <button data-k10-tab="news" onclick="k10Tab('news')">📰 Новости</button>
+          <button data-k10-tab="users" onclick="k10Tab('users')">👥 Пользователи</button>
+        </div>
+
+        <div id="k10-anime" class="k10-panel active"></div>
+        <div id="k10-episodes" class="k10-panel"></div>
+        <div id="k10-news" class="k10-panel"></div>
+        <div id="k10-users" class="k10-panel">
+          <div id="k10-users-list" class="k10-list"></div>
+        </div>
+
+        <div class="admin-grid" style="margin-top:18px">
+          <div class="admin-card">
+            <h3>🎬 Аниме</h3>
+            <input id="admin-anime-id" class="field-input" placeholder="ID, например midnight-blade">
+            <input id="admin-anime-title" class="field-input" placeholder="Название">
+            <input id="admin-anime-genre" class="field-input" placeholder="Жанр">
+            <input id="admin-anime-year" class="field-input" type="number" placeholder="Год">
+            <input id="admin-anime-status" class="field-input" placeholder="Статус">
+            <input id="admin-anime-rating" class="field-input" type="number" step="0.1" min="0" max="10" placeholder="Рейтинг">
+            <input id="admin-anime-poster" class="field-input" placeholder="URL постера">
+            <input id="admin-anime-description" class="field-input" placeholder="Описание">
+            <button class="btn-primary" onclick="adminSaveAnime()">Сохранить</button>
+            <div id="admin-anime-list" class="admin-list"></div>
+          </div>
+
+          <div class="admin-card">
+            <h3>📺 Серия</h3>
+            <input id="admin-ep-anime" class="field-input" placeholder="ID аниме">
+            <input id="admin-ep-number" class="field-input" type="number" placeholder="Номер серии">
+            <input id="admin-ep-title" class="field-input" placeholder="Название серии">
+            <input id="admin-ep-video" class="field-input" placeholder="URL видео">
+            <button class="btn-primary" onclick="adminSaveEpisode()">Сохранить серию</button>
+            <div id="admin-episode-list" class="admin-list"></div>
+          </div>
+
+          <div class="admin-card">
+            <h3>📰 Новость</h3>
+            <input id="admin-news-title" class="field-input" placeholder="Заголовок">
+            <input id="admin-news-image" class="field-input" placeholder="URL изображения">
+            <textarea id="admin-news-body" class="field-input" style="min-height:110px" placeholder="Текст новости"></textarea>
+            <button class="btn-primary" onclick="adminSaveNews()">Опубликовать</button>
+            <div id="admin-news-list" class="admin-list"></div>
+          </div>
+
+          <div class="admin-card">
+            <h3>🔔 Уведомление</h3>
+            <input id="admin-notify-user" class="field-input" placeholder="UUID пользователя">
+            <input id="admin-notify-title" class="field-input" placeholder="Заголовок">
+            <input id="admin-notify-body" class="field-input" placeholder="Текст">
+            <input id="admin-notify-link" class="field-input" placeholder="Ссылка (необязательно)">
+            <button class="btn-primary" onclick="adminSendNotification()">Отправить</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    if(typeof loadAdminLists==='function'){
+      try{await loadAdminLists()}catch(e){}
+    }
+  };
+
+  window.closeAdmin = function(){
+    const profile=document.getElementById('profile-modal');
+    if(!profile)return;
+    profile.classList.remove('k-admin-open');
+    if(typeof renderProfileModal==='function')renderProfileModal('library');
   };
 })();
 </script>
