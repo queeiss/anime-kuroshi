@@ -621,11 +621,13 @@
 }
 #k-notify-btn svg{display:block!important}
 .k-admin-entry{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  display:none!important;
+  align-items:center;justify-content:space-between;gap:12px;
   width:100%;margin-top:18px;padding:13px 15px;border-radius:12px;
   border:1px solid var(--line);background:var(--surface-2);color:var(--text);
   cursor:pointer;font:inherit;text-align:left;
 }
+#profile-modal.k-admin-verified .k-admin-entry{display:flex!important;}
 .k-admin-entry:hover{border-color:var(--violet-2)}
 .k-admin-entry span:last-child{opacity:.65}
 @media(max-width:700px){
@@ -636,28 +638,33 @@
 <script>
 /* v8: attach controls after the actual DOM exists */
 (function(){
-  function addAdminEntry(){
-    const profile = document.getElementById('profile-modal');
-    if(!profile || profile.classList.contains('hidden')) return;
-    if(profile.querySelector('.k-admin-entry')) return;
+  async function addAdminEntry(){
+    const profile=document.getElementById('profile-modal');
+    if(!profile || profile.classList.contains('hidden') || profile.classList.contains('k-admin-open')) return;
+    const box=profile.querySelector('.profile-content');
+    if(!box)return;
 
-    // Put it below the profile tabs/content, but only display it to admins.
-    const target = profile.querySelector('.profile-content') || profile.querySelector('.modal');
-    if(!target) return;
+    // Verify first; only then create the button. This removes the non-admin flash.
+    let ok=false;
+    try{
+      ok = window.isAdminCheck ? await window.isAdminCheck() : false;
+    }catch(e){ ok=false; }
+
+    const old=box.querySelector('.k-admin-entry');
+    if(!ok){
+      profile.classList.remove('k-admin-verified');
+      old?.remove();
+      return;
+    }
+
+    profile.classList.add('k-admin-verified');
+    if(old)return;
 
     const btn=document.createElement('button');
     btn.className='k-admin-entry';
     btn.innerHTML='<span>🛠️ Админ-панель</span><span>Управление KUROSHI →</span>';
     btn.onclick=()=>window.openAdmin && window.openAdmin();
-    target.appendChild(btn);
-
-    if(window.isAdminCheck){
-      window.isAdminCheck().then(ok=>{if(!ok)btn.remove();}).catch(()=>btn.remove());
-    } else if(window.sb){
-      window.sb.rpc('is_admin').then(({data,error})=>{
-        if(error || !data) btn.remove();
-      });
-    }
+    box.appendChild(btn);
   }
 
   function addNotifyFallback(){
@@ -2361,16 +2368,26 @@
       addAdminButton();
     };
   }
-  function addAdminButton(){
+  async function addAdminButton(){
     const tabs=document.querySelector('.profile-tabs');
-    if(!tabs || tabs.querySelector('[data-admin-button]'))return;
+    if(!tabs)return;
+
+    let ok=false;
+    try{ ok = await isAdmin(); }catch(e){ ok=false; }
+
+    const old=tabs.querySelector('[data-admin-button]');
+    if(!ok){
+      old?.remove();
+      return;
+    }
+    if(old)return;
+
     const btn=document.createElement('button');
     btn.className='profile-tab k-admin-btn';
     btn.dataset.adminButton='1';
     btn.textContent='🛠 Админ-панель';
     btn.onclick=window.openAdmin;
     tabs.appendChild(btn);
-    isAdmin().then(ok=>{if(!ok)btn.remove()});
   }
 
   window.addEventListener('load',async()=>{
@@ -2674,6 +2691,7 @@
     const profile=document.getElementById('profile-modal');
     if(!profile)return;
     profile.classList.remove('k-admin-open');
+    profile.classList.remove('k-admin-verified');
     if(typeof renderProfileModal==='function')renderProfileModal('library');
   };
 })();
