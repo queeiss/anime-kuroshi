@@ -686,10 +686,10 @@
     addNotifyFallback();
     const profile=document.getElementById('profile-modal');
     if(profile){
-      new MutationObserver(()=>setTimeout(addAdminEntry,50))
-        .observe(profile,{attributes:true,childList:true,subtree:true});
+      // Disabled: repeated DOM observation caused unnecessary work. Profile/admin controls are
+      // now attached by explicit profile/admin render hooks.
     }
-    setInterval(addAdminEntry,1000);
+    addAdminEntry();
   });
 })();
 </script>
@@ -3071,10 +3071,9 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   window.addEventListener('load',()=>{
     const profile=document.getElementById('profile-modal');
     if(profile){
-      new MutationObserver(()=>setTimeout(addLogout,30))
-        .observe(profile,{attributes:true,childList:true,subtree:true});
+      // Disabled: logout is refreshed by explicit profile rendering.
     }
-    setInterval(addLogout,800);
+    addLogout();
   });
 })();
 </script>
@@ -4103,7 +4102,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
   window.addEventListener('load',()=>{
     repairSaveButtons();
-    setInterval(repairSaveButtons,500);
+    repairSaveButtons();
   });
 })();
 </script>
@@ -4315,7 +4314,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   function watch(){
     const p=document.getElementById('profile-modal');
     if(!p)return;
-    new MutationObserver(()=>setTimeout(bind,20)).observe(p,{subtree:true,childList:true,attributes:true});
+    setTimeout(bind,100);
     setTimeout(bind,100);
   }
 
@@ -4422,7 +4421,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
   window.addEventListener('load',()=>setTimeout(repair,250));
   const p=document.getElementById('profile-modal');
-  if(p)new MutationObserver(()=>setTimeout(repair,10)).observe(p,{subtree:true,childList:true,attributes:true});
+  if(p)setTimeout(repair,100);
 })();
 </script>
 
@@ -4522,7 +4521,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   // Bind whenever the in-profile admin DOM is rendered/re-rendered.
   window.addEventListener('load',()=>setTimeout(bind,150));
   const p=document.getElementById('profile-modal');
-  if(p)new MutationObserver(()=>setTimeout(bind,15)).observe(p,{subtree:true,childList:true,attributes:true});
+  if(p)setTimeout(bind,100);
 })();
 </script>
 
@@ -4639,7 +4638,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
   window.addEventListener('load',()=>setTimeout(bind,250));
   const p=document.getElementById('profile-modal');
-  if(p)new MutationObserver(()=>setTimeout(bind,10)).observe(p,{childList:true,subtree:true,attributes:true});
+  if(p)setTimeout(bind,100);
 })();
 </script>
 
@@ -4801,10 +4800,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   // Bind after the admin view is dynamically rendered.
   window.addEventListener('load',()=>setTimeout(bind,300));
   const p=document.getElementById('profile-modal');
-  if(p){
-    new MutationObserver(()=>setTimeout(bind,10))
-      .observe(p,{childList:true,subtree:true,attributes:true});
-  }
+  if(p){ setTimeout(bind,100); }
   window.k42Bind=bind;
 })();
 </script>
@@ -4916,8 +4912,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
   window.addEventListener('load',()=>setTimeout(()=>{patchSave();patchEditButtons();renderGenres()},300));
   const p=document.getElementById('profile-modal');
-  if(p)new MutationObserver(()=>setTimeout(()=>{patchSave();patchEditButtons();renderGenres()},10))
-    .observe(p,{subtree:true,childList:true,attributes:true});
+  if(p)setTimeout(()=>{patchSave();patchEditButtons();renderGenres()},100);
 })();
 </script>
 
@@ -5101,9 +5096,9 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
   window.addEventListener('load',()=>setTimeout(bind,300));
   const p=document.getElementById('profile-modal');
-  if(p)new MutationObserver(()=>setTimeout(bind,20))
-    .observe(p,{subtree:true,childList:true,attributes:true});
+  if(p)setTimeout(bind,100);
 })();
 </script>
+<script>window.KUROSHI_PERF_FIX=true;</script>
 </body>
 </html>
