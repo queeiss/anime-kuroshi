@@ -864,6 +864,33 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 }
 </style>
 
+
+<style>
+/* KUROSHI v42 */
+.anime-detail-desc{
+  white-space:pre-line!important;
+  line-height:1.8!important;
+}
+#admin-anime-description{
+  white-space:pre-wrap!important;
+  min-height:220px!important;
+  line-height:1.7!important;
+}
+.k42-save{
+  display:inline-flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  position:relative!important;
+  z-index:999!important;
+  pointer-events:auto!important;
+  touch-action:manipulation!important;
+}
+.k42-save-status{
+  margin-top:10px;padding:9px 12px;border-radius:9px;
+  background:var(--surface-2);font-size:12px;min-height:18px;
+}
+.k42-save-status.ok{color:#8fe3a4}.k42-save-status.err{color:#ff9ba6}
+</style>
 </head>
 <body>
 
@@ -4637,6 +4664,129 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       history.replaceState(null,'',location.pathname+location.search);
     }
   }catch(e){}
+})();
+</script>
+
+<script>
+/* KUROSHI v42 — one final save handler, using the visible profile form */
+(function(){
+  const root=()=>document.querySelector('#profile-modal.k-admin-open .profile-content');
+  const get=id=>{
+    const r=root();
+    return (r&&r.querySelector('#'+CSS.escape(id))) || document.getElementById(id);
+  };
+  const value=id=>String(get(id)?.value ?? '');
+
+  function message(text,ok=true){
+    const r=root(); if(!r)return;
+    let box=r.querySelector('#k42-save-status');
+    if(!box){
+      box=document.createElement('div');
+      box.id='k42-save-status';
+      const card=get('admin-anime-title')?.closest('.admin-card');
+      if(card) card.appendChild(box);
+    }
+    box.className='k42-save-status '+(ok?'ok':'err');
+    box.textContent=text;
+  }
+
+  async function admin(){
+    try{
+      const {data,error}=await window.sb.rpc('is_admin');
+      return !error && data===true;
+    }catch(e){return false}
+  }
+
+  async function saveAnime(btn){
+    if(btn?.dataset.busy==='1')return;
+    if(btn)btn.dataset.busy='1';
+
+    const oldText=btn?.textContent || 'Сохранить';
+    if(btn){btn.disabled=true;btn.textContent='Сохраняем…';}
+    message('Сохраняем…',true);
+
+    try{
+      if(!(await admin()))throw new Error('Нет доступа к админ-панели');
+
+      const id=value('admin-anime-id').trim();
+      const title=value('admin-anime-title').trim();
+      if(!id)throw new Error('Заполните ID аниме');
+      if(!title)throw new Error('Заполните название аниме');
+
+      const row={
+        id,
+        title,
+        genre:value('admin-anime-genre').trim(),
+        year:Number(get('admin-anime-year')?.value)||null,
+        status:value('admin-anime-status').trim(),
+        poster:value('admin-anime-poster').trim(),
+        description:value('admin-anime-description'), // DO NOT trim: preserve final/leading line breaks inside text
+        tags:[],
+        total_episodes:Number(get('admin-anime-episodes')?.value)||null,
+        rating:0
+      };
+
+      const {error}=await window.sb.from('anime').upsert(row,{onConflict:'id'});
+      if(error)throw error;
+
+      message('Изменения сохранены ✓',true);
+      if(typeof showToast==='function')showToast('Изменения сохранены ✓');
+
+      // Refresh only the manager list if it exists; never redraw profile content.
+      try{await window.k25LoadList?.()}catch(_){}
+      try{await window.k24LoadList?.()}catch(_){}
+      try{await window.k21RenderAnimeList?.()}catch(_){}
+      try{await window.refreshKuroshiCatalog?.()}catch(_){}
+
+      if(btn){btn.textContent='Сохранено ✓';}
+      setTimeout(()=>{
+        if(btn){btn.disabled=false;btn.textContent=oldText;btn.dataset.busy='0';}
+      },1200);
+    }catch(e){
+      console.error('KUROSHI v42:',e);
+      message('Ошибка: '+(e?.message||String(e)),false);
+      if(typeof showToast==='function')showToast('Ошибка сохранения');
+      if(btn){btn.disabled=false;btn.textContent=oldText;btn.dataset.busy='0';}
+    }
+  }
+
+  function bind(){
+    const r=root();if(!r)return;
+    const card=get('admin-anime-title')?.closest('.admin-card');
+    if(!card)return;
+
+    // Replace the existing save button completely so no old listeners/inline handlers survive.
+    let btn=card.querySelector('#k42-save-btn');
+    if(!btn){
+      const candidate=[...card.querySelectorAll('button')]
+        .find(b=>(b.textContent||'').replace(/\s+/g,' ').trim()==='Сохранить');
+      if(!candidate)return;
+      btn=candidate.cloneNode(true);
+      btn.id='k42-save-btn';
+      btn.classList.add('k42-save');
+      btn.type='button';
+      btn.removeAttribute('onclick');
+      candidate.replaceWith(btn);
+    }
+    btn.classList.add('k42-save');
+    if(btn.dataset.k42Bound!=='1'){
+      btn.dataset.k42Bound='1';
+      btn.onclick=e=>{
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        saveAnime(btn);
+      };
+    }
+  }
+
+  // Bind after the admin view is dynamically rendered.
+  window.addEventListener('load',()=>setTimeout(bind,300));
+  const p=document.getElementById('profile-modal');
+  if(p){
+    new MutationObserver(()=>setTimeout(bind,10))
+      .observe(p,{childList:true,subtree:true,attributes:true});
+  }
+  window.k42Bind=bind;
 })();
 </script>
 </body>
