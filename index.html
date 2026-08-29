@@ -3854,6 +3854,137 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   });
 })();
 </script>
+
+<script>
+/* KUROSHI v29 — robust Save button for the visible admin form */
+(function(){
+  function root(){
+    return document.querySelector('#profile-modal.k-admin-open .profile-content');
+  }
+  function f(id){
+    const r=root();
+    return r ? r.querySelector('#'+CSS.escape(id)) : document.getElementById(id);
+  }
+  function v(id){
+    const e=f(id);
+    return e && typeof e.value==='string' ? e.value.trim() : '';
+  }
+  async function adminOK(){
+    try{
+      const {data,error}=await window.sb.rpc('is_admin');
+      return !error && data===true;
+    }catch(e){ return false; }
+  }
+
+  window.k29SaveAnime=async function(event){
+    event?.preventDefault?.();
+    event?.stopPropagation?.();
+
+    if(!(await adminOK())){
+      showToast('Нет доступа');
+      return false;
+    }
+
+    const id=v('admin-anime-id');
+    const title=v('admin-anime-title');
+
+    if(!id || !title){
+      showToast('Заполните ID и название');
+      f('admin-anime-id')?.focus();
+      return false;
+    }
+
+    const row={
+      id:id,
+      title:title,
+      genre:v('admin-anime-genre'),
+      year:Number(f('admin-anime-year')?.value)||null,
+      status:v('admin-anime-status'),
+      poster:v('admin-anime-poster'),
+      description:v('admin-anime-description'),
+      tags:[],
+      total_episodes:Number(f('admin-anime-episodes')?.value)||null,
+      rating:0
+    };
+
+    const {error}=await sb.from('anime').upsert(row,{onConflict:'id'});
+
+    if(error){
+      console.error('KUROSHI save anime:',error);
+      showToast('Ошибка сохранения: '+error.message);
+      return false;
+    }
+
+    showToast('Аниме сохранено ✓');
+
+    try{ if(window.k25LoadList) await window.k25LoadList(); }catch(e){}
+    try{ if(window.k24LoadList) await window.k24LoadList(); }catch(e){}
+    try{ if(window.k21RenderAnimeList) await window.k21RenderAnimeList(); }catch(e){}
+    try{ if(window.k22LoadList) await window.k22LoadList(); }catch(e){}
+    try{ if(window.k24LoadList) await window.k24LoadList(); }catch(e){}
+    try{ if(window.refreshKuroshiCatalog) await window.refreshKuroshiCatalog(); }catch(e){}
+
+    return false;
+  };
+
+  function repairSaveButtons(){
+    const r=root();
+    if(!r)return;
+
+    // Only the visible in-profile Anime form.
+    const formTitle=r.querySelector('#admin-anime-title');
+    if(!formTitle)return;
+
+    const card=formTitle.closest('.admin-card');
+    if(!card)return;
+
+    card.querySelectorAll('button').forEach(btn=>{
+      const t=(btn.textContent||'').replace(/\s+/g,' ').trim();
+      if(t==='Сохранить'){
+        btn.type='button';
+        btn.onclick=null;
+        btn.addEventListener('click',window.k29SaveAnime,{capture:true});
+        btn.dataset.k29='1';
+      }
+    });
+
+    // If the button was already marked, ensure it still has the final handler.
+    card.querySelectorAll('button[data-k29="1"]').forEach(btn=>{
+      btn.type='button';
+      btn.onclick=null;
+    });
+  }
+
+  // Event delegation is the final safety net for dynamically rendered admin content.
+  document.addEventListener('click',function(e){
+    const r=root();
+    if(!r)return;
+    const btn=e.target.closest?.('button');
+    if(!btn || !r.contains(btn))return;
+    const text=(btn.textContent||'').replace(/\s+/g,' ').trim();
+    if(text==='Сохранить' && r.querySelector('#admin-anime-title')){
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      window.k29SaveAnime(e);
+    }
+  },true);
+
+  // Prevent accidental form submission/reload.
+  document.addEventListener('submit',function(e){
+    const r=root();
+    if(r && r.contains(e.target) && r.querySelector('#admin-anime-title')){
+      e.preventDefault();
+      e.stopPropagation();
+      window.k29SaveAnime(e);
+    }
+  },true);
+
+  window.addEventListener('load',()=>{
+    repairSaveButtons();
+    setInterval(repairSaveButtons,500);
+  });
+})();
+</script>
 </body>
 
 <script>
