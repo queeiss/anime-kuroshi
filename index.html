@@ -785,6 +785,21 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 .k22-url-status{font-size:11px;color:var(--text-faint);line-height:1.4}
 .k22-url-status.ok{color:#8fe3a4}.k22-url-status.bad{color:#ff9ba6}
 </style>
+
+<style>
+.k24-manager{margin:0 0 18px;padding:16px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+.k24-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.k24-head h3{margin:0;font-size:16px}.k24-search{min-width:220px;flex:1;max-width:360px;background:var(--surface-2);border:1px solid var(--line);color:var(--text);border-radius:9px;padding:10px;font:inherit}
+.k24-status{font-size:12px;color:var(--text-faint);margin-bottom:10px}
+.k24-list{display:grid;gap:9px;max-height:480px;overflow:auto}
+.k24-row{display:grid;grid-template-columns:64px 1fr auto;gap:12px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:11px;background:var(--surface-2)}
+.k24-poster{width:64px;height:86px;object-fit:cover;border-radius:8px;background:var(--surface);border:1px solid var(--line)}
+.k24-title{font-weight:800;font-size:13px}.k24-meta{display:block;color:var(--text-faint);font-size:11px;margin-top:4px}
+.k24-actions{display:flex;gap:7px;flex-wrap:wrap;justify-content:flex-end}.k24-actions button{padding:7px 10px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--text);cursor:pointer}
+.k24-actions .danger{color:#ff8998;border-color:rgba(255,80,100,.35)}
+.k24-empty{padding:28px;text-align:center;color:var(--text-faint);border:1px dashed var(--line);border-radius:10px}
+@media(max-width:700px){.k24-row{grid-template-columns:52px 1fr}.k24-poster{width:52px;height:70px}.k24-actions{grid-column:1/-1;justify-content:stretch}.k24-actions button{flex:1}}
+</style>
 </head>
 <body>
 
@@ -1157,6 +1172,15 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   <div id="k21-anime-list" class="k21-list">
     <div class="k21-empty">Загрузка списка...</div>
   </div>
+</div>
+
+<div class="k24-manager" id="k24-manager">
+  <div class="k24-head">
+    <h3>Все опубликованные аниме</h3>
+    <input id="k24-search" class="k24-search" placeholder="Поиск по названию..." oninput="k24LoadList()">
+  </div>
+  <div id="k24-status" class="k24-status">Загрузка каталога…</div>
+  <div id="k24-list" class="k24-list"></div>
 </div>
 <div class="admin-card">
         <h3>🎬 Аниме</h3>
@@ -2870,6 +2894,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     if(typeof loadAdminLists==='function'){
       try{await loadAdminLists()}catch(e){}
     }
+    setTimeout(()=>window.k24Ensure && window.k24Ensure(),120);
   };
 
   window.closeAdmin = function(){
@@ -3286,6 +3311,108 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       return result;
     };
   }
+})();
+</script>
+
+<script>
+(function(){
+  const $=id=>document.getElementById(id);
+  const esc=v=>String(v??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  const qstr=v=>String(v??'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+
+  async function adminOK(){
+    try{const {data,error}=await window.sb.rpc('is_admin');return !error&&data===true}catch(e){return false}
+  }
+
+  async function loadRows(){
+    const box=$('k24-list'), st=$('k24-status');
+    if(!box)return;
+    box.innerHTML='';
+    st.textContent='Загрузка каталога…';
+    if(!(await adminOK())){st.textContent='Нет прав администратора';return}
+    const {data,error}=await sb.from('anime')
+      .select('id,title,genre,year,status,poster,rating,total_episodes,created_at,updated_at')
+      .order('updated_at',{ascending:false});
+    if(error){st.textContent='Ошибка загрузки: '+error.message;return}
+    const needle=($('k24-search')?.value||'').trim().toLowerCase();
+    const rows=(data||[]).filter(x=>!needle||String(x.title||'').toLowerCase().includes(needle));
+    st.textContent=`Найдено: ${rows.length}`;
+    if(!rows.length){box.innerHTML='<div class="k24-empty">В таблице anime пока нет опубликованных аниме.</div>';return}
+    box.innerHTML=rows.map(x=>`
+      <div class="k24-row" data-k24-id="${qstr(x.id)}">
+        ${x.poster?`<img class="k24-poster" src="${esc(x.poster)}" referrerpolicy="no-referrer" alt="">`:'<div class="k24-poster"></div>'}
+        <div>
+          <div class="k24-title">${esc(x.title)}</div>
+          <span class="k24-meta">ID: ${esc(x.id)}</span>
+          <span class="k24-meta">${esc(x.genre||'')} · ${esc(x.year||'')} · ${esc(x.status||'')} · ★ ${Number(x.rating||0).toFixed(1)}</span>
+        </div>
+        <div class="k24-actions">
+          <button onclick="k24Edit('${qstr(x.id)}')">Изменить</button>
+          <button class="danger" onclick="k24Delete('${qstr(x.id)}')">Удалить</button>
+        </div>
+      </div>`).join('');
+  }
+  window.k24LoadList=loadRows;
+
+  window.k24Edit=async function(id){
+    const {data,error}=await sb.from('anime').select('*').eq('id',id).maybeSingle();
+    if(error||!data){showToast(error?.message||'Аниме не найдено');return}
+    const set=(id,v)=>{const e=$(id);if(e)e.value=v??''};
+    set('admin-anime-id',data.id);set('admin-anime-title',data.title);set('admin-anime-genre',data.genre);
+    set('admin-anime-year',data.year);set('admin-anime-status',data.status);set('admin-anime-poster',data.poster);
+    set('admin-anime-description',data.description);
+    if($('admin-anime-rating'))$('admin-anime-rating').value=0;
+    document.querySelectorAll('.k24-row').forEach(x=>x.style.outline='');
+    document.querySelector(`[data-k24-id="${CSS.escape(id)}"]`)?.style.setProperty('outline','2px solid var(--violet)');
+    showToast('Аниме загружено — можно редактировать');
+  };
+
+  window.k24Delete=async function(id){
+    if(!(await adminOK()))return showToast('Нет доступа');
+    const ok=confirm('Удалить это аниме из каталога? Серии этого аниме тоже будут удалены.');
+    if(!ok)return;
+    const {error}=await sb.from('anime').delete().eq('id',id);
+    if(error){showToast('Ошибка: '+error.message);return}
+    await loadRows();
+    if(window.refreshKuroshiCatalog)await window.refreshKuroshiCatalog();
+    showToast('Аниме удалено ✓');
+  };
+
+  // Override any earlier save handler to make publishing write into public.anime.
+  window.adminSaveAnime=function(){
+    return k24Save();
+  };
+  window.k24Save=async function(){
+    if(!(await adminOK()))return showToast('Нет доступа');
+    const id=$('admin-anime-id')?.value.trim();
+    const title=$('admin-anime-title')?.value.trim();
+    if(!id||!title)return showToast('Заполните ID и название');
+
+    const tags=[];
+    const row={
+      id,title,
+      genre:$('admin-anime-genre')?.value.trim()||'',
+      year:Number($('admin-anime-year')?.value)||null,
+      status:$('admin-anime-status')?.value.trim()||'',
+      poster:$('admin-anime-poster')?.value.trim()||'',
+      description:$('admin-anime-description')?.value.trim()||'',
+      tags,
+      rating:0
+    };
+    const {error}=await sb.from('anime').upsert(row,{onConflict:'id'});
+    if(error){showToast('Ошибка: '+error.message);return}
+    await loadRows();
+    if(window.refreshKuroshiCatalog)await window.refreshKuroshiCatalog();
+    showToast('Аниме опубликовано/обновлено ✓');
+  };
+
+  // Explicitly load every time the actual in-profile admin view appears.
+  window.k24Ensure=async function(){
+    const manager=$('k24-manager');
+    if(manager) await loadRows();
+  };
+
+  window.addEventListener('load',()=>setTimeout(()=>window.k24Ensure(),300));
 })();
 </script>
 </body>
