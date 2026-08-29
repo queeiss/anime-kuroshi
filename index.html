@@ -845,6 +845,25 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 /* KUROSHI v37 — persistent admin route */
 #profile-modal.k-admin-open .k12-admin-shell{display:block!important}
 </style>
+
+<style>
+/* KUROSHI v40 — multiline anime description */
+.k40-description{
+  min-height:180px!important;
+  resize:vertical!important;
+  line-height:1.65!important;
+  white-space:pre-wrap!important;
+  font-family:inherit!important;
+}
+.k40-description:focus{
+  border-color:var(--violet)!important;
+  outline:none!important;
+}
+.anime-detail-desc{
+  white-space:pre-wrap;
+}
+</style>
+
 </head>
 <body>
 
@@ -2921,7 +2940,9 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
                 </div>
               </div>
             </div>
-            <input id="admin-anime-description" class="field-input" placeholder="Описание">
+            <textarea id="admin-anime-description" class="field-input k40-description" placeholder="Описание
+
+Можно делать абзацы, отступы и переносы строк."></textarea>
             <button class="btn-primary" onclick="adminSaveAnime()">Сохранить</button>
             <div id="admin-anime-list" class="admin-list"></div>
           </div>
