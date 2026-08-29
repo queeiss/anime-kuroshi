@@ -687,6 +687,17 @@
 })();
 </script>
 
+
+<style>
+/* KUROSHI v11 — admin panel opens above the profile */
+#admin-modal{
+  z-index:4000!important;
+}
+#admin-modal .modal{
+  max-height:90vh;
+}
+</style>
+
 </head>
 <body>
 
@@ -2245,10 +2256,17 @@
 
   window.openAdmin=async function(){
     if(!(await isAdmin())){showToast('Нет доступа к админ-панели');return;}
-    document.getElementById('admin-modal').classList.remove('hidden');
+    const adminModal=document.getElementById('admin-modal');
+    if(!adminModal)return;
+    adminModal.classList.remove('hidden');
+    adminModal.style.zIndex='4000';
     document.getElementById('admin-status').innerHTML='<p style="color:var(--violet-2);font-size:12px">✓ Доступ администратора подтверждён</p>';
   };
-  window.closeAdmin=()=>document.getElementById('admin-modal').classList.add('hidden');
+  window.closeAdmin=()=>{
+    const adminModal=document.getElementById('admin-modal');
+    if(adminModal)adminModal.classList.add('hidden');
+    /* Profile remains open underneath. */
+  };
 
   window.adminSaveAnime=async function(){
     if(!(await isAdmin()))return;
