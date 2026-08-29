@@ -3712,6 +3712,148 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   };
 })();
 </script>
+
+<script>
+/* KUROSHI v28 — final admin fix: visible form + reliable poster upload */
+(function(){
+  const ROOT='#profile-modal.k-admin-open .profile-content';
+  const $id=(id)=>{
+    const root=document.querySelector(ROOT);
+    return root ? root.querySelector('#'+CSS.escape(id)) : document.getElementById(id);
+  };
+  const val=id=>($id(id)?.value||'').trim();
+
+  async function adminOK(){
+    try{
+      const {data,error}=await window.sb.rpc('is_admin');
+      return !error && data===true;
+    }catch(e){return false}
+  }
+
+  window.k28UploadPoster=async function(input){
+    const file=input?.files?.[0];
+    if(!file)return;
+    const status=$id('k27-poster-status') || $id('k22-poster-status') || $id('k10-storage-status');
+    if(status) status.textContent='Загрузка постера…';
+    if(!(await adminOK())){
+      if(status) status.textContent='Нет прав администратора.';
+      return;
+    }
+    try{
+      const ext=(file.name.split('.').pop()||'jpg').toLowerCase().replace(/[^a-z0-9]/g,'')||'jpg';
+      const path=`posters/${crypto.randomUUID()}.${ext}`;
+      const {error}=await sb.storage.from('posters').upload(path,file,{
+        upsert:true,
+        contentType:file.type||'image/jpeg'
+      });
+      if(error) throw error;
+      const {data}=sb.storage.from('posters').getPublicUrl(path);
+      const url=data?.publicUrl||'';
+      const poster=$id('admin-anime-poster');
+      if(poster)poster.value=url;
+      if(status){
+        status.textContent='Постер загружен ✓';
+        status.style.color='#8fe3a4';
+      }
+      if(typeof window.k27Preview==='function') setTimeout(window.k27Preview,50);
+    }catch(e){
+      console.error('Poster upload:',e);
+      if(status){
+        status.textContent='Ошибка: '+(e?.message||'не удалось загрузить');
+        status.style.color='#ff9ba6';
+      }
+    }
+  };
+
+  window.k28SaveAnime=async function(){
+    if(!(await adminOK())) return showToast('Нет доступа');
+    const id=val('admin-anime-id');
+    const title=val('admin-anime-title');
+    if(!id||!title)return showToast('Заполните ID и название');
+
+    const row={
+      id,title,
+      genre:val('admin-anime-genre'),
+      year:Number($id('admin-anime-year')?.value)||null,
+      status:val('admin-anime-status'),
+      poster:val('admin-anime-poster'),
+      description:val('admin-anime-description'),
+      tags:[],
+      total_episodes:Number($id('admin-anime-episodes')?.value)||null,
+      rating:0
+    };
+
+    const {error}=await sb.from('anime').upsert(row,{onConflict:'id'});
+    if(error){
+      showToast('Ошибка сохранения: '+error.message);
+      console.error(error);
+      return;
+    }
+    if(window.k25LoadList) await window.k25LoadList().catch(()=>{});
+    if(window.k24LoadList) await window.k24LoadList().catch(()=>{});
+    if(window.k21RenderAnimeList) await window.k21RenderAnimeList().catch(()=>{});
+    if(window.refreshKuroshiCatalog) await window.refreshKuroshiCatalog().catch(()=>{});
+    showToast('Аниме сохранено ✓');
+  };
+
+  window.k28EditAnime=async function(id){
+    const {data,error}=await sb.from('anime').select('*').eq('id',id).maybeSingle();
+    if(error||!data){
+      showToast(error?.message||'Аниме не найдено');
+      return;
+    }
+    ['admin-anime-id','admin-anime-title','admin-anime-genre','admin-anime-status','admin-anime-poster','admin-anime-description'].forEach(k=>{
+      const field=$id(k);
+      const map={
+        'admin-anime-id':data.id,'admin-anime-title':data.title,'admin-anime-genre':data.genre,
+        'admin-anime-status':data.status,'admin-anime-poster':data.poster,'admin-anime-description':data.description
+      };
+      if(field)field.value=map[k]??'';
+    });
+    const y=$id('admin-anime-year'); if(y)y.value=data.year??'';
+    const r=$id('admin-anime-rating'); if(r)r.value=0;
+    if(typeof window.k27Preview==='function')setTimeout(window.k27Preview,60);
+    showToast('Аниме загружено для редактирования');
+  };
+
+  // Make the visible buttons use the final handlers, defeating older patch overrides.
+  window.adminSaveAnime=window.k28SaveAnime;
+  window.k25Edit=window.k28EditAnime;
+  window.k21EditAnime=window.k28EditAnime;
+  window.k10UploadPoster=window.k28UploadPoster;
+
+  function repair(){
+    const root=document.querySelector(ROOT);
+    if(!root)return;
+    root.querySelectorAll('button').forEach(btn=>{
+      const t=(btn.textContent||'').trim();
+      if(t==='Сохранить' && root.querySelector('#admin-anime-title')){
+        btn.type='button';
+        btn.onclick=window.k28SaveAnime;
+      }
+      if(t==='Сохранить изменения' && root.querySelector('#admin-anime-title')){
+        btn.type='button';
+        btn.onclick=window.k28SaveAnime;
+      }
+    });
+    const file=root.querySelector('#k27-poster-file');
+    if(file)file.onchange=()=>window.k28UploadPoster(file);
+    const oldFile=root.querySelector('input.k10-file[type="file"]');
+    if(oldFile)oldFile.onchange=()=>window.k28UploadPoster(oldFile);
+  }
+
+  const oldOpen=window.openAdmin;
+  window.openAdmin=async function(){
+    if(oldOpen)await oldOpen();
+    setTimeout(repair,100);
+    setTimeout(repair,500);
+  };
+
+  window.addEventListener('load',()=>{
+    setTimeout(repair,300);
+  });
+})();
+</script>
 </body>
 
 <script>
