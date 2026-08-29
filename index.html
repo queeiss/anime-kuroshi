@@ -1744,5 +1744,91 @@
 })();
 </script>
 
+
+<script>
+/* KUROSHI v4 — user-facing progress/rating/comments widgets */
+(function () {
+  const ready = () => window.sb && window.KuroshiV3;
+
+  function toast(msg) {
+    if (typeof window.showToast === 'function') return window.showToast(msg);
+    const el = document.createElement('div');
+    el.textContent = msg;
+    Object.assign(el.style, {
+      position:'fixed', left:'50%', bottom:'24px', transform:'translateX(-50%)',
+      zIndex:99999, padding:'12px 18px', borderRadius:'12px',
+      background:'rgba(0,0,0,.85)', color:'#fff', fontSize:'14px'
+    });
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 2600);
+  }
+
+  function getAnimeFromCard(card) {
+    const title = card?.dataset?.animeTitle || card?.querySelector('[data-anime-title]')?.textContent?.trim();
+    const id = card?.dataset?.animeId || title;
+    if (!title) return null;
+    return { id, title };
+  }
+
+  window.KuroshiV4 = {
+    async markEpisode(anime, episode, totalEpisodes) {
+      if (!ready()) return;
+      try {
+        await window.KuroshiV3.saveProgress(anime, episode, totalEpisodes);
+        toast('Прогресс сохранён ☁️');
+      } catch (e) { console.error(e); toast('Не удалось сохранить прогресс'); }
+    },
+
+    async rate(anime, value) {
+      if (!ready()) return;
+      try {
+        await window.KuroshiV3.rate(anime, value);
+        toast('Оценка сохранена ⭐');
+      } catch (e) { console.error(e); toast(e.message || 'Не удалось сохранить оценку'); }
+    },
+
+    async comment(anime, text) {
+      if (!ready()) return;
+      try {
+        await window.KuroshiV3.addComment(anime, text);
+        toast('Комментарий опубликован 💬');
+      } catch (e) { console.error(e); toast(e.message || 'Не удалось добавить комментарий'); }
+    },
+
+    async continueWatching(container) {
+      if (!ready()) return;
+      const rows = await window.KuroshiV3.progress();
+      if (!container) return;
+      container.innerHTML = '';
+      if (!rows.length) {
+        container.innerHTML = '<div class="empty-state">Здесь появится твоё продолжение просмотра.</div>';
+        return;
+      }
+      rows.slice(0, 10).forEach(row => {
+        const item = document.createElement('div');
+        item.className = 'continue-item';
+        item.innerHTML = `
+          <strong>${escapeHtml(row.anime_title)}</strong>
+          <span>Серия ${row.episode}${row.total_episodes ? ' / ' + row.total_episodes : ''}</span>
+          <div class="progress-track"><i style="width:${Math.max(0, Math.min(100, row.progress_percent || 0))}%"></i></div>
+        `;
+        container.appendChild(item);
+      });
+    }
+  };
+
+  function escapeHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    }[c]));
+  }
+
+  window.addEventListener('load', () => {
+    const c = document.querySelector('[data-continue-watching]');
+    if (c) window.KuroshiV4.continueWatching(c);
+  });
+})();
+</script>
+
 </body>
 </html>
