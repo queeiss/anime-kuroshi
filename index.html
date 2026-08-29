@@ -1521,5 +1521,122 @@
   renderCatalogGrid();
   initSupabaseAuth();
 </script>
+
+<script>
+/* KUROSHI — Supabase library sync patch */
+(function () {
+  const LIB_DEFAULT = {
+    watching: [], planned: [], dropped: [], later: [], favorites: []
+  };
+
+  function normalizeLibrary(lib) {
+    const out = {};
+    Object.keys(LIB_DEFAULT).forEach(k => {
+      out[k] = Array.isArray(lib && lib[k]) ? lib[k] : [];
+    });
+    return out;
+  }
+
+  function localLibrary() {
+    try {
+      return normalizeLibrary(JSON.parse(localStorage.getItem('kuroshiLibrary') || '{}'));
+    } catch (_) {
+      return normalizeLibrary(null);
+    }
+  }
+
+  async function cloudLibrary() {
+    if (!window.sb) return localLibrary();
+    const { data: { user } } = await window.sb.auth.getUser();
+    if (!user) return localLibrary();
+
+    const { data, error } = await window.sb
+      .from('profiles')
+      .select('library')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (error || !data) return localLibrary();
+    const lib = normalizeLibrary(data.library);
+    localStorage.setItem('kuroshiLibrary', JSON.stringify(lib));
+    return lib;
+  }
+
+  async function saveCloudLibrary(lib) {
+    lib = normalizeLibrary(lib);
+    localStorage.setItem('kuroshiLibrary', JSON.stringify(lib));
+
+    if (!window.sb) return lib;
+    const { data: { user } } = await window.sb.auth.getUser();
+    if (!user) return lib;
+
+    const { error } = await window.sb
+      .from('profiles')
+      .update({
+        library: lib,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', user.id);
+
+    if (error) console.error('KUROSHI library sync:', error);
+    return lib;
+  }
+
+  window.KuroshiLibrary = {
+    load: cloudLibrary,
+    save: saveCloudLibrary,
+    normalize: normalizeLibrary
+  };
+
+  window.toggleLibrary = async function (anime, category) {
+    const lib = await cloudLibrary();
+    const list = lib[category] || (lib[category] = []);
+
+    const key = String(anime.id ?? anime.title ?? anime.name);
+    const index = list.findIndex(x =>
+      String(x.id ?? x.title ?? x.name) === key
+    );
+
+    if (index >= 0) {
+      list.splice(index, 1);
+    } else {
+      list.push({
+        id: anime.id ?? null,
+        title: anime.title ?? anime.name ?? '',
+        status: anime.status ?? '',
+        year: anime.year ?? '',
+        genre: anime.genre ?? '',
+        poster: anime.poster ?? anime.image ?? ''
+      });
+    }
+
+    await saveCloudLibrary(lib);
+
+    if (typeof window.renderProfileModal === 'function') {
+      try { window.renderProfileModal(); } catch (_) {}
+    }
+    return lib;
+  };
+
+  // Sync library after authentication and when the page becomes visible.
+  async function syncLibrary() {
+    try {
+      const lib = await cloudLibrary();
+      localStorage.setItem('kuroshiLibrary', JSON.stringify(lib));
+      if (typeof window.renderProfileModal === 'function') {
+        try { window.renderProfileModal(); } catch (_) {}
+      }
+    } catch (e) {
+      console.error('KUROSHI library load:', e);
+    }
+  }
+
+  window.addEventListener('load', syncLibrary);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) syncLibrary();
+  });
+})();
+</script>
+
 </body>
 </html>
