@@ -777,7 +777,7 @@
     <div id="form-login">
       <div class="auth-title">С возвращением</div>
       <div class="auth-sub">Войдите, чтобы продолжить просмотр и синхронизировать список избранного.</div>
-      <form onsubmit="return handleAuthSubmit(event, 'login')">
+      <form onsubmit="handleAuthSubmit(event, 'login'); return false">
         <div class="field"><label>Email или имя пользователя</label><input type="text" placeholder="you@example.com" autocomplete="username" required></div>
         <div class="field"><label>Пароль</label><input type="password" placeholder="••••••••" autocomplete="current-password" required></div>
         <button type="submit" class="auth-submit">Войти в аккаунт</button>
@@ -788,7 +788,7 @@
     <div id="form-register" class="hidden">
       <div class="auth-title">Создать аккаунт</div>
       <div class="auth-sub">Регистрация бесплатна и займёт меньше минуты.</div>
-      <form onsubmit="return handleAuthSubmit(event, 'register')">
+      <form onsubmit="handleAuthSubmit(event, 'register'); return false">
         <div class="field"><label>Имя</label><input type="text" placeholder="Как к вам обращаться" autocomplete="name" required></div>
         <div class="field"><label>Email</label><input type="email" placeholder="you@example.com" autocomplete="email" required></div>
         <div class="field"><label>Пароль</label><input type="password" placeholder="Минимум 8 символов" autocomplete="new-password" required></div>
@@ -867,7 +867,15 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
+  /* ===================== SUPABASE ===================== */
+  const SUPABASE_URL = 'https://qndgawtfricqovsgnqxm.supabase.co';
+  const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_7bYHs__Grvw1Zo2Fxb_O9A_1bvXgvWc';
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+  let currentUserData = null;
+  let authReady = false;
+
   /* ===================== THEME ===================== */
   const themeBtns = document.querySelectorAll('.theme-btn');
   themeBtns.forEach(btn=>{
@@ -890,10 +898,7 @@
   }
 
   /* ===================== NAV / PAGES ===================== */
-  const STORAGE_USERS = 'kuroshi_users_v2';
-  const STORAGE_SESSION = 'kuroshi_session_v2';
   const XP_PER_EPISODE = 50;
-  // Для перехода на следующий уровень нужно: 100 XP, затем 200 XP, затем 300 XP и т.д.
   function xpForNextLevel(level){ return Math.max(1, Number(level)||1) * 100; }
   function totalXpForLevel(level){
     level=Math.max(1, Number(level)||1);
@@ -907,47 +912,35 @@
     'https://api.dicebear.com/9.x/thumbs/svg?seed=Ren'
   ];
 
+  function normalizeName(name){ return String(name||'').trim().replace(/\\s+/g,' ').toLocaleLowerCase('ru'); }
 
-  function migrateLegacyAccountStorage(){
-    // Preserve accounts from an earlier KUROSHI version if they exist.
-    const legacyKeys=['kuroshi_users','kuroshi_accounts','users'];
-    const current=loadUsers();
-    if(current.length)return;
-    for(const key of legacyKeys){
-      try{
-        const old=JSON.parse(localStorage.getItem(key)||'[]');
-        if(Array.isArray(old) && old.length){
-          const migrated=old.map((u,i)=>({
-            id:u.id || ('u_migrated_'+Date.now()+'_'+i),
-            name:u.name || u.username || 'Пользователь',
-            email:(u.email||'').toLowerCase(),
-            password:u.password||'',
-            age:u.age||'',bio:u.bio||'',telegram:u.telegram||'',vk:u.vk||'',instagram:u.instagram||'',
-            avatar:u.avatar||defaultAvatars[i%defaultAvatars.length],
-            createdAt:u.createdAt||new Date().toISOString(),
-            xp:Number(u.xp)||0,level:userLevel(Number(u.xp)||0),
-            library:u.library||{watching:[],planned:[],dropped:[],later:[],favorites:[]},
-            watchedEpisodes:u.watchedEpisodes||[]
-          }));
-          saveUsers(migrated);
-          if(localStorage.getItem(STORAGE_SESSION)===null && old[0]?.id){
-            localStorage.setItem(STORAGE_SESSION,migrated[0].id);
-          }
-          break;
-        }
-      }catch(e){}
-    }
+  function mapProfile(row, authUser=null){
+    if(!row && !authUser)return null;
+    const meta=authUser?.user_metadata||{};
+    return {
+      id: authUser?.id || row?.id,
+      name: row?.name || meta.name || 'Пользователь',
+      email: authUser?.email || '',
+      age: row?.age ?? '',
+      bio: row?.bio || '',
+      telegram: row?.telegram || '',
+      vk: row?.vk || '',
+      instagram: row?.instagram || '',
+      avatar: row?.avatar || '',
+      createdAt: row?.created_at || authUser?.created_at || new Date().toISOString(),
+      xp: Number(row?.xp)||0,
+      level: Number(row?.level)||userLevel(Number(row?.xp)||0),
+      library: row?.library || {watching:[],planned:[],dropped:[],later:[],favorites:[]},
+      watchedEpisodes: row?.watched_episodes || []
+    };
   }
 
-  function loadUsers(){
-    try { return JSON.parse(localStorage.getItem(STORAGE_USERS) || '[]'); }
-    catch(e){ return []; }
-  }
-  function saveUsers(users){ localStorage.setItem(STORAGE_USERS, JSON.stringify(users)); }
-  function currentUser(){
-    const id = localStorage.getItem(STORAGE_SESSION);
-    return loadUsers().find(u=>u.id===id) || null;
-  }
+  function currentUser(){ return currentUserData; }
+
+  // Сохраняем совместимость с остальным интерфейсом KUROSHI.
+  function loadUsers(){ return currentUserData ? [currentUserData] : []; }
+  function saveUsers(){ /* Данные теперь сохраняются в Supabase, а не localStorage. */ }
+
   function userLevel(xp){
     xp=Math.max(0, Number(xp)||0);
     let level=1;
@@ -965,6 +958,38 @@
     return {level,current,needed,pct:Math.min(100,Math.round(current/needed*100))};
   }
 
+  async function loadCurrentProfile(authUser){
+    if(!authUser){
+      currentUserData=null;
+      return null;
+    }
+    const {data,error}=await sb.from('profiles').select('*').eq('id',authUser.id).maybeSingle();
+    if(error){
+      console.error('Profile load error:',error);
+      showToast('Не удалось загрузить профиль');
+      return null;
+    }
+    currentUserData=mapProfile(data,authUser);
+    return currentUserData;
+  }
+
+  async function initSupabaseAuth(){
+    try{
+      const {data:{session}}=await sb.auth.getSession();
+      await loadCurrentProfile(session?.user || null);
+      refreshAuthUI();
+      authReady=true;
+
+      sb.auth.onAuthStateChange(async (_event, session)=>{
+        await loadCurrentProfile(session?.user || null);
+        refreshAuthUI();
+      });
+    }catch(err){
+      console.error(err);
+      showToast('Не удалось подключиться к авторизации');
+    }
+  }
+
   function showPage(page){
     document.getElementById('page-home').classList.toggle('hidden', page!=='home');
     document.getElementById('page-catalog').classList.toggle('hidden', page!=='catalog');
@@ -978,7 +1003,7 @@
   }
 
   /* ===================== AUTH ===================== */
-  let loggedIn = !!currentUser();
+  let loggedIn = false;
 
   function refreshAuthUI(){
     const user = currentUser();
@@ -1007,57 +1032,68 @@
     document.getElementById('form-register').classList.toggle('hidden', tab!=='register');
   }
 
-  function normalizeName(name){ return name.trim().replace(/\s+/g,' ').toLocaleLowerCase('ru'); }
-  function isNameTaken(name, exceptId=null){
-    const n = normalizeName(name);
-    return loadUsers().some(u => u.id!==exceptId && normalizeName(u.name)===n);
-  }
-
-  function handleAuthSubmit(e, type){
+  async function handleAuthSubmit(e, type){
     e.preventDefault();
-    const form = e.target;
-    const inputs = form.querySelectorAll('input');
-    const users = loadUsers();
+    const form=e.target;
+    const inputs=form.querySelectorAll('input');
 
     if(type==='register'){
-      const name = inputs[0].value.trim();
-      const email = inputs[1].value.trim().toLowerCase();
-      const password = inputs[2].value;
+      const name=inputs[0].value.trim();
+      const email=inputs[1].value.trim().toLowerCase();
+      const password=inputs[2].value;
 
-      if(password.length < 8){ showToast('Пароль должен содержать минимум 8 символов'); return false; }
-      if(isNameTaken(name)){ showToast('Это имя уже занято. Выберите другое.'); return false; }
-      if(users.some(u=>u.email===email)){ showToast('Этот email уже зарегистрирован'); return false; }
+      if(name.length<2){showToast('Введите имя минимум из 2 символов');return false;}
+      if(password.length<8){showToast('Пароль должен содержать минимум 8 символов');return false;}
 
-      const user = {
-        id: 'u_' + Date.now() + '_' + Math.random().toString(36).slice(2,8),
-        name, email, password,
-        age: '', bio:'', telegram:'', vk:'', instagram:'',
-        avatar: defaultAvatars[users.length % defaultAvatars.length],
-        createdAt: new Date().toISOString(),
-        xp:0, level:1,
-        library:{watching:[],planned:[],dropped:[],later:[],favorites:[]},
-        watchedEpisodes:[]
-      };
-      users.push(user);
-      saveUsers(users);
-      localStorage.setItem(STORAGE_SESSION, user.id);
+      const {data,error}=await sb.auth.signUp({
+        email,
+        password,
+        options:{data:{name}}
+      });
+
+      if(error){
+        console.error(error);
+        showToast(error.message.includes('already registered') ? 'Этот email уже зарегистрирован' : 'Ошибка регистрации: '+error.message);
+        return false;
+      }
+
+      closeAuthModal();
+
+      if(data.session){
+        await loadCurrentProfile(data.user);
+        refreshAuthUI();
+        showToast('Аккаунт создан, добро пожаловать!');
+      }else{
+        showToast('Аккаунт создан. Проверьте почту для подтверждения.');
+      }
+    }else{
+      const email=inputs[0].value.trim().toLowerCase();
+      const password=inputs[1].value;
+
+      const {data,error}=await sb.auth.signInWithPassword({email,password});
+
+      if(error){
+        console.error(error);
+        showToast('Неверный email или пароль');
+        return false;
+      }
+
+      await loadCurrentProfile(data.user);
       closeAuthModal();
       refreshAuthUI();
-      showToast('Аккаунт создан, добро пожаловать!');
-    }else{
-      const login = inputs[0].value.trim().toLowerCase();
-      const password = inputs[1].value;
-      const user = users.find(u=>(u.email===login || normalizeName(u.name)===normalizeName(login)) && u.password===password);
-      if(!user){ showToast('Неверное имя/email или пароль'); return false; }
-      localStorage.setItem(STORAGE_SESSION,user.id);
-      closeAuthModal(); refreshAuthUI();
       showToast('Вы вошли в аккаунт');
     }
     return false;
   }
 
-  function logout(){
-    localStorage.removeItem(STORAGE_SESSION);
+  async function logout(){
+    const {error}=await sb.auth.signOut();
+    if(error){
+      console.error(error);
+      showToast('Не удалось выйти из аккаунта');
+      return;
+    }
+    currentUserData=null;
     refreshAuthUI();
     closeProfileModal();
     showToast('Вы вышли из аккаунта');
@@ -1167,28 +1203,41 @@
     reader.readAsDataURL(file);
     e.target.value='';
   }
-  function saveProfileSettings(){
+  async function saveProfileSettings(){
     const user=currentUser(); if(!user)return;
     const btn=document.getElementById('profile-save-btn');
     if(btn?.disabled)return;
+
     const name=document.getElementById('set-name').value.trim();
     if(!name){showToast('Введите имя');return;}
-    if(isNameTaken(name,user.id)){showToast('Это имя уже занято. Выберите другое.');return;}
+
     try{
-      const users=loadUsers(), idx=users.findIndex(u=>u.id===user.id);
-      if(idx<0)throw new Error('user-not-found');
-      users[idx]={...users[idx],
-        name, age:document.getElementById('set-age').value,
+      if(btn){btn.disabled=true;btn.textContent='Сохраняем...';}
+
+      const updates={
+        name,
+        age:document.getElementById('set-age').value ? Number(document.getElementById('set-age').value) : null,
         bio:document.getElementById('set-bio').value.trim(),
         telegram:document.getElementById('set-telegram').value.trim(),
         vk:document.getElementById('set-vk').value.trim(),
         instagram:document.getElementById('set-instagram').value.trim(),
-        avatar:selectedAvatar || user.avatar
+        avatar:selectedAvatar || user.avatar,
+        updated_at:new Date().toISOString()
       };
-      saveUsers(users);
+
+      const {data,error}=await sb.from('profiles')
+        .update(updates)
+        .eq('id',user.id)
+        .select('*')
+        .single();
+
+      if(error)throw error;
+
+      currentUserData=mapProfile(data,{id:user.id,email:user.email,created_at:user.createdAt,user_metadata:{name:data.name}});
       selectedAvatar=null;
       refreshAuthUI();
       renderProfileModal('settings');
+
       const freshBtn=document.getElementById('profile-save-btn');
       if(freshBtn){
         freshBtn.disabled=true;
@@ -1199,9 +1248,10 @@
     }catch(err){
       console.error(err);
       if(btn){btn.disabled=false;btn.textContent='Сохранить изменения';}
-      showToast('Не удалось сохранить изменения. Попробуйте фото меньшего размера.');
+      showToast('Не удалось сохранить изменения');
     }
   }
+
   function formatDate(iso){
     return new Date(iso).toLocaleDateString('ru-RU',{day:'2-digit',month:'2-digit',year:'numeric'});
   }
@@ -1248,20 +1298,42 @@
   }
 
   /* Начисление опыта за просмотр серии. Одна серия даёт XP только один раз. */
-  function markEpisodeWatched(animeTitle, episode){
+  async function markEpisodeWatched(animeTitle, episode){
     const user=currentUser();
     if(!user){showToast('Войдите в аккаунт, чтобы получать опыт');return;}
+
     const key=String(animeTitle)+'::'+String(episode);
-    const users=loadUsers(),idx=users.findIndex(u=>u.id===user.id);
-    const u=users[idx];
-    u.watchedEpisodes=u.watchedEpisodes||[];
-    if(u.watchedEpisodes.includes(key)){showToast('За эту серию опыт уже начислен');return;}
-    u.watchedEpisodes.push(key);
-    u.xp=(u.xp||0)+XP_PER_EPISODE;
-    const oldLevel=u.level||1;u.level=userLevel(u.xp);
-    saveUsers(users);
+    const watched=[...(user.watchedEpisodes||[])];
+
+    if(watched.includes(key)){
+      showToast('За эту серию опыт уже начислен');
+      return;
+    }
+
+    watched.push(key);
+    const xp=(user.xp||0)+XP_PER_EPISODE;
+    const level=userLevel(xp);
+
+    const {data,error}=await sb.from('profiles')
+      .update({
+        xp,
+        level,
+        watched_episodes:watched,
+        updated_at:new Date().toISOString()
+      })
+      .eq('id',user.id)
+      .select('*')
+      .single();
+
+    if(error){
+      console.error(error);
+      showToast('Не удалось сохранить опыт');
+      return;
+    }
+
+    currentUserData=mapProfile(data,{id:user.id,email:user.email,created_at:user.createdAt,user_metadata:{name:data.name}});
     refreshAuthUI();
-    showToast(u.level>oldLevel ? `+${XP_PER_EPISODE} XP · Новый уровень ${u.level}!` : `+${XP_PER_EPISODE} XP`);
+    showToast(level>(user.level||1) ? `+${XP_PER_EPISODE} XP · Новый уровень ${level}!` : `+${XP_PER_EPISODE} XP`);
   }
 
   /* ===================== DATA ===================== */
@@ -1447,7 +1519,7 @@
   function applyFilters(){ renderCatalogGrid(); }
 
   renderCatalogGrid();
-  updateAuthUI();
+  initSupabaseAuth();
 </script>
 </body>
 </html>
