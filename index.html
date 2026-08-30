@@ -1558,7 +1558,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       const {data,error}=await sb.auth.signUp({
         email,
         password,
-        options:{data:{name}}
+        options:{data:{name, username:name}}
       });
 
       if(error){
@@ -1577,14 +1577,27 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         showToast('Аккаунт создан. Проверьте почту для подтверждения.');
       }
     }else{
-      const email=inputs[0].value.trim().toLowerCase();
+      // "Email или имя пользователя": Supabase Auth only accepts an email,
+      // so if what's typed isn't an email, resolve it to the account's
+      // email via a username lookup first.
+      const rawLogin=inputs[0].value.trim();
       const password=inputs[1].value;
+      let email=rawLogin.toLowerCase();
+
+      if(!rawLogin.includes('@')){
+        const {data:resolvedEmail,error:lookupError}=await sb.rpc('get_email_by_username',{p_username:rawLogin});
+        if(lookupError || !resolvedEmail){
+          showToast('Пользователь с таким именем не найден');
+          return false;
+        }
+        email=resolvedEmail.toLowerCase();
+      }
 
       const {data,error}=await sb.auth.signInWithPassword({email,password});
 
       if(error){
         console.error(error);
-        showToast('Неверный email или пароль');
+        showToast('Неверный email/имя пользователя или пароль');
         return false;
       }
 
@@ -3082,11 +3095,17 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   }
 
   window.addEventListener('load',()=>{
-    const profile=document.getElementById('profile-modal');
-    if(profile){
-      // Disabled: logout is refreshed by explicit profile rendering.
-    }
     addLogout();
+    // renderProfileModal replaces .profile-content on every open/tab switch,
+    // which wipes out the button above — so re-attach it after each render,
+    // the same way the admin button hooks itself back in.
+    const original=window.renderProfileModal;
+    if(typeof original==='function'){
+      window.renderProfileModal=function(tab){
+        original(tab);
+        addLogout();
+      };
+    }
   });
 })();
 </script>
