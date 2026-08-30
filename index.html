@@ -109,6 +109,12 @@
     font-family:'Noto Serif JP', serif; font-size:12px; color:var(--text-faint);
     writing-mode: vertical-rl; letter-spacing:2px;
   }
+  .nav-burger{
+    display:none; width:38px; height:38px; align-items:center; justify-content:center;
+    background:var(--surface); border:1px solid var(--line); border-radius:9px; color:var(--text);
+    cursor:pointer; flex:none;
+  }
+  .nav-burger svg{width:18px; height:18px;}
   .nav-links{display:flex; align-items:center; gap:30px; font-size:14.5px; font-weight:600; color:var(--text-dim);}
   .nav-links button{
     position:relative; padding:6px 0; transition:color .25s; background:none; border:none;
@@ -367,6 +373,16 @@
   }
   .forgot-password-link:hover{text-decoration:underline;}
   .settings-divider{border-top:1px solid var(--line); margin:22px 0 18px;}
+  .player-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);}
+  .player-head strong{display:block;font-size:15px;}
+  .player-head span{font-size:12px;color:var(--text-faint);}
+  .player-screen{aspect-ratio:16/9;background:#000;display:flex;align-items:center;justify-content:center;}
+  .player-placeholder{text-align:center;color:var(--text-faint);}
+  .player-placeholder svg{margin-bottom:12px;opacity:.5;}
+  .player-placeholder p{color:var(--text-dim);font-weight:700;font-size:14px;margin-bottom:6px;}
+  .player-placeholder span{font-size:12px;}
+  .player-controls{display:flex;align-items:center;justify-content:space-between;padding:16px 22px;font-size:13px;color:var(--text-faint);}
+  .player-controls button:disabled{opacity:.35;cursor:not-allowed;}
   .auth-submit{
     width:100%; background:linear-gradient(120deg,var(--violet),var(--magenta)); color:#fff; font-weight:700;
     font-size:14px; padding:13px; border-radius:9px; border:none; cursor:pointer; margin-top:6px; box-shadow:var(--shadow-glow);
@@ -560,7 +576,20 @@
   }
 
   @media (max-width:980px){
-    .nav-links{display:none;}
+    .nav-burger{display:flex;}
+    .nav-links{
+      display:none; position:absolute; top:100%; left:0; right:0;
+      flex-direction:column; align-items:stretch; gap:2px; padding:10px;
+      background:var(--bg); border-bottom:1px solid var(--line);
+      box-shadow:0 20px 40px rgba(0,0,0,0.3);
+    }
+    .nav-links.open{display:flex;}
+    .nav-links button{
+      padding:13px 14px; border-radius:9px; text-align:left; width:100%;
+    }
+    .nav-links button:hover, .nav-links button.active{background:var(--surface);}
+    .nav-links button.active::after{display:none;}
+    nav{position:relative;}
     .search{display:none;}
     .hero-inner{grid-template-columns:1fr;}
     h1.title{font-size:54px;}
@@ -985,7 +1014,10 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       <span class="logo-mark">KUROSHI</span>
       <span class="logo-jp">黒紫</span>
     </button>
-    <div class="nav-links">
+    <button class="nav-burger" id="nav-burger" onclick="toggleMobileNav()" aria-label="Меню">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+    <div class="nav-links" id="nav-links">
       <button class="active" data-nav="home" onclick="showPage('home')">Главная</button>
       <button data-nav="catalog" onclick="showPage('catalog')">Каталог</button>
       <button data-nav="users" onclick="showPage('users')">Пользователи</button>
@@ -994,7 +1026,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     <div class="nav-right">
       <div class="search">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-        <input type="text" placeholder="Найти аниме, тайтл...">
+        <input type="text" placeholder="Найти аниме, тайтл..." onkeydown="if(event.key==='Enter'){goToCatalogSearch(this.value);this.blur();}">
       </div>
       <div class="theme-toggle">
         <button class="theme-btn active" data-theme-btn="violet" title="Фиолетовая тема">
@@ -1103,6 +1135,10 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     </div>
     <div class="catalog-toolbar">
       <div class="toolbar-left">
+        <div class="search" style="min-width:220px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input id="catalog-search" type="text" placeholder="Поиск по названию..." oninput="setSearchQuery(this.value)">
+        </div>
         <button class="btn-filter" onclick="openFilterModal()">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
           Фильтры
@@ -1202,14 +1238,28 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       <span class="logo-mark" style="font-size:22px;">KUROSHI</span>
     </div>
     <div class="footer-links">
-      <a href="#">О проекте</a>
-      <a href="#">Правообладателям</a>
-      <a href="#">Поддержка</a>
-      <a href="#">Телеграм</a>
+      <a href="#" onclick="openInfoModal('about');return false;">О проекте</a>
+      <a href="#" onclick="openInfoModal('rights');return false;">Правообладателям</a>
+      <a href="#" onclick="openInfoModal('support');return false;">Поддержка</a>
+      <a href="#" onclick="openInfoModal('telegram');return false;">Телеграм</a>
     </div>
     <p>© 2026 KUROSHI. Макет интерфейса, демонстрационные данные.</p>
   </div>
 </footer>
+
+<div class="overlay hidden" id="info-modal">
+  <div class="modal" style="max-width:520px;padding:30px 32px;">
+    <button class="modal-close" onclick="closeInfoModal()">✕</button>
+    <div class="filter-title" id="info-modal-title">—</div>
+    <div id="info-modal-body" style="color:var(--text-dim);font-size:14px;line-height:1.7;"></div>
+  </div>
+</div>
+
+<div class="overlay hidden" id="player-modal">
+  <div class="modal" style="max-width:760px;padding:0;overflow:hidden;">
+    <div id="player-content"></div>
+  </div>
+</div>
 
 <!-- ================= AUTH MODAL ================= -->
 <div class="overlay hidden" id="auth-modal">
@@ -1587,6 +1637,19 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     }
   }
 
+  function toggleMobileNav(){
+    document.getElementById('nav-links')?.classList.toggle('open');
+  }
+  function closeMobileNav(){
+    document.getElementById('nav-links')?.classList.remove('open');
+  }
+  document.addEventListener('click',(e)=>{
+    const links=document.getElementById('nav-links'), burger=document.getElementById('nav-burger');
+    if(!links || !links.classList.contains('open'))return;
+    if(links.contains(e.target) || burger?.contains(e.target))return;
+    closeMobileNav();
+  });
+
   function showPage(page){
     document.getElementById('page-home').classList.toggle('hidden', page!=='home');
     document.getElementById('page-catalog').classList.toggle('hidden', page!=='catalog');
@@ -1595,6 +1658,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     document.querySelectorAll('.nav-links button').forEach(b=>b.classList.remove('active'));
     const btn = document.querySelector(`.nav-links button[data-nav="${page}"]`);
     if(btn) btn.classList.add('active');
+    closeMobileNav();
     window.scrollTo({top:0, behavior:'smooth'});
     if(page==='catalog') renderCatalogGrid();
     if(page==='users') renderUsers();
@@ -2214,6 +2278,20 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   const tagSet = [...new Set(catalog.flatMap(a=>a.tags))];
 
   const filters = { genres:new Set(), years:new Set(), status:new Set(), tags:new Set() };
+  let searchQuery = '';
+  let searchDebounce = null;
+  function setSearchQuery(value){
+    searchQuery = String(value||'').trim().toLowerCase();
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(()=>renderCatalogGrid(), 150);
+  }
+  function goToCatalogSearch(query){
+    showPage('catalog');
+    const input = document.getElementById('catalog-search');
+    if(input) input.value = query;
+    setSearchQuery(query);
+    renderCatalogGrid();
+  }
 
   function buildCard(item){
     const card = document.createElement('div');
@@ -2302,11 +2380,45 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   function openFilterModal(){ document.getElementById('filter-modal').classList.remove('hidden'); updateApplyCount(); }
   function closeFilterModal(){ document.getElementById('filter-modal').classList.add('hidden'); }
 
+  const infoContent = {
+    about: {
+      title: 'О проекте',
+      body: `<p>KUROSHI — сайт для просмотра и обсуждения аниме: каталог тайтлов, личный список просмотра, оценки, комментарии и профили пользователей.</p>
+             <p style="margin-top:12px">Проект находится в активной разработке — часть данных и функций пока демонстрационные.</p>`
+    },
+    rights: {
+      title: 'Правообладателям',
+      body: `<p>Если вы правообладатель и считаете, что на сайте размещены материалы с нарушением ваших прав — свяжитесь с нами, и мы оперативно рассмотрим обращение и уберём материал при необходимости.</p>
+             <p style="margin-top:12px">Контакт для обращений: <strong>укажите здесь свою почту</strong>.</p>`
+    },
+    support: {
+      title: 'Поддержка',
+      body: `<p>Если что-то не работает, нашли баг или есть предложение — напишите нам.</p>
+             <p style="margin-top:12px">Контакт для поддержки: <strong>укажите здесь свою почту или Telegram</strong>.</p>`
+    },
+    telegram: {
+      title: 'Telegram',
+      body: `<p>Официальный Telegram-канал проекта скоро появится здесь.</p>
+             <p style="margin-top:12px;color:var(--text-faint)">Как заведёте канал — пришлите ссылку, подключим её к этой кнопке.</p>`
+    }
+  };
+  function openInfoModal(key){
+    const info = infoContent[key]; if(!info) return;
+    document.getElementById('info-modal-title').textContent = info.title;
+    document.getElementById('info-modal-body').innerHTML = info.body;
+    document.getElementById('info-modal').classList.remove('hidden');
+  }
+  function closeInfoModal(){ document.getElementById('info-modal').classList.add('hidden'); }
+
   function matchesFilters(item){
     if(filters.genres.size && !filters.genres.has(item.genre)) return false;
     if(filters.years.size && !filters.years.has(item.year)) return false;
     if(filters.status.size && !filters.status.has(item.status)) return false;
     if(filters.tags.size && !item.tags.some(t=>filters.tags.has(t))) return false;
+    if(searchQuery){
+      const haystack = `${item.title||''} ${item.alternateTitleEn||''}`.toLowerCase();
+      if(!haystack.includes(searchQuery)) return false;
+    }
     return true;
   }
   function filteredList(){ return catalog.filter(matchesFilters); }
@@ -2315,6 +2427,9 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   }
   function resetFilters(){
     filters.genres.clear(); filters.years.clear(); filters.status.clear(); filters.tags.clear();
+    searchQuery='';
+    const searchInput=document.getElementById('catalog-search');
+    if(searchInput) searchInput.value='';
     document.querySelectorAll('.f-chip').forEach(c=>c.classList.remove('selected'));
     updateApplyCount();
     applyFilters();
@@ -2349,7 +2464,13 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     if(sort==='rating') list = [...list].sort((a,b)=>b.rating-a.rating);
     else if(sort==='year') list = [...list].sort((a,b)=>b.year-a.year);
     else if(sort==='alpha') list = [...list].sort((a,b)=>a.title.localeCompare(b.title,'ru'));
-    list.forEach(item=>grid.appendChild(buildCard(item)));
+    if(!list.length){
+      grid.innerHTML = `<div style="grid-column:1/-1;text-align:center;padding:50px 20px;color:var(--text-faint)">
+        Ничего не нашлось${searchQuery?` по запросу «${escapeHtml(searchQuery)}»`:''}. Попробуйте изменить фильтры или запрос.
+      </div>`;
+    }else{
+      list.forEach(item=>grid.appendChild(buildCard(item)));
+    }
     document.getElementById('result-count').textContent = `${list.length} тайтл${list.length%10===1 && list.length%100!==11 ? '' : (list.length===0?'ов':'ов')}`;
     document.getElementById('result-count').textContent = list.length + ' тайтлов найдено';
     const activeCount = filters.genres.size + filters.years.size + filters.status.size + filters.tags.size;
@@ -2820,8 +2941,33 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     }
     const btn=document.getElementById('ep-'+ep);
     if(btn)btn.classList.add('watched');
-    if(typeof showToast==='function')showToast(`Серия ${ep} сохранена ▶`);
+    renderPlayer(ep);
   };
+
+  function renderPlayer(ep){
+    const total=activeAnime.totalEpisodes||24;
+    const modal=document.getElementById('player-modal');
+    const box=document.getElementById('player-content');
+    box.innerHTML=`
+      <div class="player-head">
+        <div><strong>${esc(activeAnime.title)}</strong><span>Серия ${ep} из ${total}</span></div>
+        <button class="modal-close" onclick="closePlayer()">✕</button>
+      </div>
+      <div class="player-screen">
+        <div class="player-placeholder">
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>
+          <p>Видео этой серии пока не подключено</p>
+          <span>Прогресс сохранён — вернитесь позже, когда появится трансляция</span>
+        </div>
+      </div>
+      <div class="player-controls">
+        <button class="anime-action" ${ep<=1?'disabled':''} onclick="openEpisode(${ep-1})">‹ Предыдущая</button>
+        <span>Серия ${ep} / ${total}</span>
+        <button class="anime-action" ${ep>=total?'disabled':''} onclick="openEpisode(${ep+1})">Следующая ›</button>
+      </div>`;
+    modal.classList.remove('hidden');
+  }
+  window.closePlayer=function(){ document.getElementById('player-modal')?.classList.add('hidden'); };
 })();
 </script>
 
