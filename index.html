@@ -677,6 +677,7 @@
 .anime-action{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:inherit;border-radius:10px;padding:9px 13px;cursor:pointer}
 .anime-action:hover{background:rgba(255,255,255,.11)}
 .rating-box{padding:15px;border:1px solid rgba(255,255,255,.1);border-radius:14px;margin-bottom:18px}
+.rating-hint{display:block;margin-top:8px;color:var(--text-faint);font-size:11px}
 .rating-buttons{display:flex;gap:5px;flex-wrap:wrap;margin-top:9px}
 .rating-buttons button{width:34px;height:34px;border:0;border-radius:8px;background:rgba(255,255,255,.08);color:inherit;cursor:pointer}
 .rating-buttons button.active{outline:2px solid #fff}
@@ -687,6 +688,7 @@
 .episode-list button.active-episode{background:linear-gradient(120deg,var(--violet),var(--magenta));border-color:transparent;color:#fff}
 html[data-theme="mono"] .episode-list button.active-episode{color:#000}
 .watch-episodes-box{margin-top:24px;margin-bottom:24px;padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.watch-comments-link{width:100%;justify-content:center;margin-bottom:32px}
 .watch-episodes-box .episode-list{max-height:220px;overflow-y:auto}
 .comments-box{margin-top:22px}
 .similar-section{margin-top:36px}
@@ -2775,6 +2777,15 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       if (window.refreshCatalogAfterRating) await window.refreshCatalogAfterRating();
     },
 
+    async unrate(anime) {
+      const u = await user(); if (!u) throw new Error('Войдите в аккаунт');
+      const key = String(anime.id ?? anime.title);
+      const { error } = await sb.from('ratings').delete()
+        .eq('user_id', u.id).eq('anime_key', key);
+      if (error) throw error;
+      if (window.refreshCatalogAfterRating) await window.refreshCatalogAfterRating();
+    },
+
     async getRating(anime) {
       const u = await user(); if (!u) return null;
       const key = String(anime.id ?? anime.title);
@@ -2783,19 +2794,22 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       return data?.rating ?? null;
     },
 
-    async addComment(anime, body) {
+    async addComment(anime, body, episode) {
       const u = await user(); if (!u) throw new Error('Войдите в аккаунт');
       const text = String(body || '').trim();
       if (!text) throw new Error('Комментарий пустой');
       if (text.length > 2000) throw new Error('Максимум 2000 символов');
+      const baseKey = String(anime.id ?? anime.title);
+      const key = episode ? `${baseKey}::ep${episode}` : baseKey;
       const { error } = await sb.from('comments').insert({
-        user_id: u.id, anime_key: String(anime.id ?? anime.title), body: text
+        user_id: u.id, anime_key: key, body: text
       });
       if (error) throw error;
     },
 
-    async comments(anime) {
-      const key = String(anime.id ?? anime.title);
+    async comments(anime, episode) {
+      const baseKey = String(anime.id ?? anime.title);
+      const key = episode ? `${baseKey}::ep${episode}` : baseKey;
       const { data, error } = await sb.from('comments')
         .select('id,user_id,anime_key,body,created_at')
         .eq('anime_key', key).order('created_at', { ascending: false });
@@ -2979,7 +2993,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     showPage('anime');
 
     const content = document.getElementById('anime-page-content');
-    const total = item.totalEpisodes || 24;
+    const total = item.totalEpisodes || 1;
     const tags = (item.tags || []).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
     content.innerHTML = `
       <div class="anime-detail">
@@ -3013,6 +3027,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
               <div class="rating-buttons">
                 ${Array.from({length:10},(_,i)=>`<button onclick="rateActiveAnime(${i+1})" data-rate="${i+1}">${i+1}</button>`).join('')}
               </div>
+              <small class="rating-hint">Нажми на свою оценку ещё раз, чтобы убрать её</small>
             </div>
 
             <div class="episodes-box">
@@ -3102,11 +3117,19 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
   window.rateActiveAnime = async function(value){
     if(!activeAnime || !window.KuroshiV3) return;
+    const alreadyActive=document.querySelector(`.rating-buttons button[data-rate="${value}"]`)?.classList.contains('active');
     try{
-      await window.KuroshiV3.rate(activeAnime,value);
-      document.getElementById('my-rating').textContent=value+'/10';
-      document.querySelectorAll('.rating-buttons button').forEach(b=>b.classList.toggle('active',Number(b.dataset.rate)===value));
-      if(typeof showToast==='function')showToast('Оценка сохранена ');
+      if(alreadyActive){
+        await window.KuroshiV3.unrate(activeAnime);
+        document.getElementById('my-rating').textContent='—';
+        document.querySelectorAll('.rating-buttons button').forEach(b=>b.classList.remove('active'));
+        if(typeof showToast==='function')showToast('Оценка убрана');
+      }else{
+        await window.KuroshiV3.rate(activeAnime,value);
+        document.getElementById('my-rating').textContent=value+'/10';
+        document.querySelectorAll('.rating-buttons button').forEach(b=>b.classList.toggle('active',Number(b.dataset.rate)===value));
+        if(typeof showToast==='function')showToast('Оценка сохранена ');
+      }
     }catch(e){if(typeof showToast==='function')showToast(e.message||'Войдите в аккаунт');}
   };
 
@@ -3114,9 +3137,9 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     if(!activeAnime || !window.KuroshiV3) return;
     const input=document.getElementById('comment-input');
     try{
-      await window.KuroshiV3.addComment(activeAnime,input.value);
+      await window.KuroshiV3.addComment(activeAnime,input.value,activeEpisode);
       input.value='';
-      const comments=await window.KuroshiV3.comments(activeAnime);
+      const comments=await window.KuroshiV3.comments(activeAnime,activeEpisode);
       renderComments(comments,'comment-list');
       if(typeof showToast==='function')showToast('Комментарий опубликован ');
     }catch(e){if(typeof showToast==='function')showToast(e.message||'Войдите в аккаунт');}
@@ -3149,7 +3172,8 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   window.reactToComment=async function(id,reaction,listId){
     try{
       await window.KuroshiV3.toggleCommentLike(id,reaction);
-      const comments=await window.KuroshiV3.comments(activeAnime);
+      const episodeScope = listId==='comment-list' ? activeEpisode : undefined;
+      const comments=await window.KuroshiV3.comments(activeAnime,episodeScope);
       renderComments(comments,listId);
     }catch(e){if(typeof showToast==='function')showToast(e.message||'Войдите в аккаунт');}
   };
@@ -3158,7 +3182,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   window.openEpisode=async function(ep){
     if(!activeAnime)return;
     if(window.KuroshiV4){
-      await window.KuroshiV4.markEpisode(activeAnime,ep,activeAnime.totalEpisodes||24);
+      await window.KuroshiV4.markEpisode(activeAnime,ep,activeAnime.totalEpisodes||1);
     }else if(typeof markEpisodeWatched==='function'){
       await markEpisodeWatched(activeAnime.title,ep);
     }
@@ -3170,7 +3194,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   };
 
   async function renderPlayer(ep){
-    const total=activeAnime.totalEpisodes||24;
+    const total=activeAnime.totalEpisodes||1;
     const box=document.getElementById('watch-page-content');
     box.innerHTML=`
       <div class="player-head" style="border:1px solid var(--line);border-radius:14px 14px 0 0;">
@@ -3195,21 +3219,22 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         </div>
       </div>
       <div class="comments-box">
-        <strong>Комментарии</strong>
+        <strong>Комментарии к серии ${ep}</strong>
         <div class="comment-form">
-          <textarea id="comment-input" maxlength="2000" placeholder="Напиши своё мнение..."></textarea>
+          <textarea id="comment-input" maxlength="2000" placeholder="Что думаешь об этой серии?"></textarea>
           <button class="anime-action" onclick="postActiveComment()">Отправить</button>
         </div>
         <div id="comment-list" class="comment-list"><small>Загрузка...</small></div>
-      </div>`;
+      </div>
+      <button class="btn-ghost watch-comments-link" onclick="showPage('anime');switchAnimeTab('comments');window.scrollTo({top:0,behavior:'smooth'})">Обсудить аниме целиком в комментариях к тайтлу</button>`;
 
     const activeBtn=document.getElementById('watch-ep-'+ep);
     if(activeBtn) activeBtn.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
 
     try{
       if(window.KuroshiV3){
-        const comments = await window.KuroshiV3.comments(activeAnime);
-        renderComments(comments);
+        const comments = await window.KuroshiV3.comments(activeAnime,ep);
+        renderComments(comments,'comment-list');
       }
     }catch(e){ console.error(e); }
   }
@@ -3842,7 +3867,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       ...fallback,
       id:x.id,title:x.title,alternateTitleEn:x.alternate_title_en||x.alt_title||'',description:x.description||'',genre:x.genre||'',
       year:x.year||'',status:x.status||'',tags:Array.isArray(x.tags)?x.tags:[],
-      poster:x.poster||fallback.poster||'',totalEpisodes:x.total_episodes||fallback.totalEpisodes||24,
+      poster:x.poster||fallback.poster||'',totalEpisodes:x.total_episodes||fallback.totalEpisodes||1,
       rating:0,ratingCount:0
     };
   }
