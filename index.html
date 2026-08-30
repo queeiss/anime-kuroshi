@@ -374,7 +374,9 @@
   }
   .forgot-password-link:hover{text-decoration:underline;}
   .settings-divider{border-top:1px solid var(--line); margin:22px 0 18px;}
-  .player-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);}
+  .player-head{display:flex;align-items:center;justify-content:space-between;padding:18px 22px;border-bottom:1px solid var(--line);flex-wrap:wrap;gap:10px}
+  .source-controls{display:flex;gap:8px;flex-wrap:wrap}
+  .source-controls .sort-select{padding:8px 10px;font-size:12.5px}
   .player-head strong{display:block;font-size:15px;}
   .player-head span{font-size:12px;color:var(--text-faint);}
   .player-screen{aspect-ratio:16/9;background:#000;display:flex;align-items:center;justify-content:center;}
@@ -3306,12 +3308,12 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     box.innerHTML=`
       <div class="player-head" style="border:1px solid var(--line);border-radius:14px 14px 0 0;">
         <div><strong>${esc(activeAnime.title)}</strong><span>Серия ${ep} из ${total}</span></div>
+        <div class="player-source-controls" id="player-source-controls"></div>
       </div>
-      <div class="player-screen" style="border:1px solid var(--line);border-top:0;">
+      <div class="player-screen" id="player-screen" style="border:1px solid var(--line);border-top:0;">
         <div class="player-placeholder">
           <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>
-          <p>Видео этой серии пока не подключено</p>
-          <span>Прогресс сохранён — вернитесь позже, когда появится трансляция</span>
+          <p>Загрузка видео…</p>
         </div>
       </div>
       <div class="player-controls" style="border:1px solid var(--line);border-top:0;border-radius:0 0 14px 14px;">
@@ -3354,6 +3356,97 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         }
       }
     }catch(e){ console.error(e); }
+
+    try{
+      const animeKey = String(activeAnime.id ?? activeAnime.title);
+      const { data: epRow } = await window.sb.from('episodes')
+        .select('id,video_url,title').eq('anime_id',animeKey).eq('episode_number',ep).maybeSingle();
+
+      let sources = [];
+      if(epRow?.id){
+        const { data: srcRows } = await window.sb.from('episode_sources')
+          .select('dub_name,quality,video_url').eq('episode_id',epRow.id);
+        sources = srcRows || [];
+      }
+
+      const screen = document.getElementById('player-screen');
+      const controlsRow = document.getElementById('player-source-controls');
+      if(sources.length){
+        currentEpisodeSources = sources;
+        const dubs = [...new Set(sources.map(s=>s.dub_name))];
+        preferredDub = dubs.includes(preferredDub) ? preferredDub : dubs[0];
+        const qualitiesForDub = sources.filter(s=>s.dub_name===preferredDub).map(s=>s.quality);
+        preferredQuality = qualitiesForDub.includes(preferredQuality) ? preferredQuality : qualitiesForDub[qualitiesForDub.length-1];
+        if(controlsRow) controlsRow.innerHTML = buildSourceControls(dubs, qualitiesForDub);
+        const active = sources.find(s=>s.dub_name===preferredDub && s.quality===preferredQuality) || sources[0];
+        if(screen) screen.innerHTML = buildPlayerScreen(active?.video_url||'');
+      }else{
+        currentEpisodeSources = [];
+        if(controlsRow) controlsRow.innerHTML = '';
+        if(screen) screen.innerHTML = buildPlayerScreen(epRow?.video_url||'');
+      }
+    }catch(e){
+      console.error('load episode video',e);
+      const screen = document.getElementById('player-screen');
+      if(screen) screen.innerHTML = buildPlayerScreen('');
+    }
+  }
+
+  let currentEpisodeSources = [];
+  let preferredDub = '';
+  let preferredQuality = '';
+
+  function buildSourceControls(dubs, qualities){
+    if(dubs.length<=1 && qualities.length<=1) return '';
+    return `<div class="source-controls">
+      ${dubs.length>1 ? `<select class="sort-select" onchange="switchVideoDub(this.value)">
+        ${dubs.map(d=>`<option value="${esc(d)}" ${d===preferredDub?'selected':''}>${esc(d)}</option>`).join('')}
+      </select>` : ''}
+      ${qualities.length>1 ? `<select class="sort-select" onchange="switchVideoQuality(this.value)">
+        ${qualities.map(q=>`<option value="${esc(q)}" ${q===preferredQuality?'selected':''}>${esc(q)}</option>`).join('')}
+      </select>` : ''}
+    </div>`;
+  }
+
+  function applyCurrentSource(){
+    const active = currentEpisodeSources.find(s=>s.dub_name===preferredDub && s.quality===preferredQuality)
+      || currentEpisodeSources.find(s=>s.dub_name===preferredDub)
+      || currentEpisodeSources[0];
+    const screen = document.getElementById('player-screen');
+    if(screen && active) screen.innerHTML = buildPlayerScreen(active.video_url);
+  }
+
+  window.switchVideoDub = function(dub){
+    preferredDub = dub;
+    const qualitiesForDub = currentEpisodeSources.filter(s=>s.dub_name===dub).map(s=>s.quality);
+    if(!qualitiesForDub.includes(preferredQuality)) preferredQuality = qualitiesForDub[qualitiesForDub.length-1];
+    const controlsRow = document.getElementById('player-source-controls');
+    const dubs = [...new Set(currentEpisodeSources.map(s=>s.dub_name))];
+    if(controlsRow) controlsRow.innerHTML = buildSourceControls(dubs, qualitiesForDub);
+    applyCurrentSource();
+  };
+  window.switchVideoQuality = function(quality){
+    preferredQuality = quality;
+    applyCurrentSource();
+  };
+
+  function buildPlayerScreen(videoUrl){
+    if(!videoUrl){
+      return `<div class="player-placeholder">
+        <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M10 9l5 3-5 3z"/></svg>
+        <p>Видео этой серии пока не подключено</p>
+        <span>Прогресс сохранён — вернитесь позже, когда появится трансляция</span>
+      </div>`;
+    }
+    const yt = videoUrl.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/|shorts\/))([\w-]{6,})/i);
+    if(yt){
+      return `<iframe src="https://www.youtube.com/embed/${yt[1]}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:0"></iframe>`;
+    }
+    if(/\.(mp4|webm|ogg)(\?.*)?$/i.test(videoUrl)){
+      return `<video src="${esc(videoUrl)}" controls autoplay playsinline style="width:100%;height:100%;background:#000"></video>`;
+    }
+    // Unknown link type (VK, Vimeo, direct iframe embed, etc.) — try as an embed.
+    return `<iframe src="${esc(videoUrl)}" allow="autoplay; fullscreen; picture-in-picture" allowfullscreen style="width:100%;height:100%;border:0"></iframe>`;
   }
 })();
 </script>
@@ -3866,9 +3959,32 @@ html[data-theme="mono"] .k10-admin-tabs button.active{color:#000}
               <input id="admin-ep-number" class="field-input" type="number" placeholder="Номер серии">
               <input id="admin-ep-title" class="field-input" placeholder="Название серии">
             </div>
-            <input id="admin-ep-video" class="field-input" placeholder="URL видео">
-            <button class="btn-primary" onclick="adminSaveEpisode()">Сохранить серию</button>
-            <div id="admin-episode-list" class="admin-list"></div>
+            <button class="btn-ghost" style="margin-top:10px;width:100%" onclick="adminLoadEpisodeSources()">Загрузить источники этой серии</button>
+          </div>
+
+          <div class="admin-card">
+            <h3>Добавить источник видео</h3>
+            <div class="admin-field-row">
+              <input id="admin-src-dub" class="field-input" list="admin-dub-options" placeholder="Озвучка, напр. Оригинал (субтитры)">
+              <select id="admin-src-quality" class="field-input">
+                <option>480p</option>
+                <option selected>720p</option>
+                <option>1080p</option>
+              </select>
+            </div>
+            <datalist id="admin-dub-options">
+              <option value="Оригинал (субтитры)">
+              <option value="Дубляж">
+              <option value="Закадровый">
+            </datalist>
+            <div class="admin-poster-upload">
+              <div class="admin-poster-upload-label">Загрузить файл видео из галереи</div>
+              <input id="admin-src-file" type="file" accept="video/*" style="width:100%" onchange="adminUploadEpisodeVideo(this)">
+              <div id="admin-src-upload-status" class="admin-poster-status" style="margin-top:8px">MP4/WebM, до размера, который позволяет ваш тариф Supabase.</div>
+            </div>
+            <input id="admin-src-video" class="field-input" placeholder="...или вставьте готовую ссылку (YouTube, mp4 и т.д.)">
+            <button class="btn-primary" onclick="adminAddEpisodeSource()">Добавить источник</button>
+            <div id="admin-src-list" class="admin-list"></div>
           </div>
         </div>
 
@@ -6302,18 +6418,18 @@ html[data-theme="mono"] .k10-admin-tabs button.active{color:#000}
 
 <script>
 /* KUROSHI — final, single source of truth for saving anime.
-   The file accumulated several older save handlers over time; this one
-   always wins by directly taking over the button, so fields like the
-   English alt title reliably save. */
+   The file accumulated several older save handlers over time, all still
+   wired to the same button. Instead of trying to rebind the button (which
+   depends on timing), this intercepts the click itself, in the capture
+   phase, before any older handler gets a chance to run — guaranteeing this
+   is the code that actually saves, every single time. */
 (function(){
   const sb = window.sb;
   function root(){ return document.querySelector('#profile-modal.k-admin-open .profile-content'); }
   function field(id){ return root()?.querySelector('#'+CSS.escape(id)) || document.getElementById(id); }
   function val(id){ return String(field(id)?.value ?? '').trim(); }
 
-  window.adminSaveAnimeFinal = async function(){
-    const r = root(); if(!r) return;
-    const btn = field('admin-anime-id')?.closest('.admin-card')?.querySelector('.btn-primary');
+  window.adminSaveAnimeFinal = async function(btn){
     if(btn){ btn.disabled = true; btn.dataset.originalText = btn.dataset.originalText || btn.textContent; btn.textContent = 'Сохраняем…'; }
     try{
       const { data: adminCheck, error: adminErr } = await sb.rpc('is_admin');
@@ -6340,7 +6456,7 @@ html[data-theme="mono"] .k10-admin-tabs button.active{color:#000}
       const { error } = await sb.from('anime').upsert(row, { onConflict: 'id' });
       if(error) throw error;
 
-      if(typeof showToast === 'function') showToast('Аниме сохранено ✓');
+      if(typeof showToast === 'function') showToast('Аниме сохранено, включая альт. название ✓');
       if(window.refreshKuroshiCatalog) await window.refreshKuroshiCatalog();
       if(window.k21RenderAnimeList) await window.k21RenderAnimeList().catch(()=>{});
       if(window.k25LoadList) await window.k25LoadList().catch(()=>{});
@@ -6348,28 +6464,122 @@ html[data-theme="mono"] .k10-admin-tabs button.active{color:#000}
     }catch(e){
       console.error('adminSaveAnimeFinal:', e);
       if(typeof showToast === 'function') showToast('Ошибка сохранения: ' + (e?.message || String(e)));
+      else alert('Ошибка сохранения: ' + (e?.message || String(e)));
     }finally{
       if(btn){ btn.disabled = false; btn.textContent = btn.dataset.originalText || 'Сохранить'; }
     }
   };
 
-  // Always take over the actual "Сохранить" button for the anime form,
-  // overriding whatever older handler was previously wired to it, every
-  // time the admin panel is (re)opened.
-  function rebindSaveButton(){
-    const r = root(); if(!r) return;
-    const idField = field('admin-anime-id'); if(!idField) return;
-    const card = idField.closest('.admin-card'); if(!card) return;
-    const btn = card.querySelector('.btn-primary'); if(!btn) return;
-    btn.onclick = (e)=>{ e.preventDefault(); window.adminSaveAnimeFinal(); };
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest('button');
+    if(!btn) return;
+    const idField = field('admin-anime-id');
+    if(!idField) return;
+    const card = idField.closest('.admin-card');
+    if(!card || !card.contains(btn)) return;
+    if((btn.textContent||'').trim().indexOf('Сохран') !== 0) return;
+    // This is the anime form's save button — take over completely.
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    window.adminSaveAnimeFinal(btn);
+  }, true);
+})();
+</script>
+
+<script>
+/* KUROSHI — episode sources: multiple dub/quality video variants per episode */
+(function(){
+  const sb = window.sb;
+
+  async function ensureEpisode(){
+    const animeId = document.getElementById('admin-ep-anime')?.value.trim();
+    const epNumber = Number(document.getElementById('admin-ep-number')?.value);
+    const epTitle = document.getElementById('admin-ep-title')?.value.trim() || null;
+    if(!animeId){ showToast('Укажите ID аниме'); return null; }
+    if(!epNumber){ showToast('Укажите номер серии'); return null; }
+
+    const { data: existing } = await sb.from('episodes')
+      .select('id').eq('anime_id', animeId).eq('episode_number', epNumber).maybeSingle();
+
+    if(existing) {
+      if(epTitle) await sb.from('episodes').update({ title: epTitle }).eq('id', existing.id);
+      return existing.id;
+    }
+
+    const { data: created, error } = await sb.from('episodes')
+      .insert({ anime_id: animeId, episode_number: epNumber, title: epTitle })
+      .select('id').single();
+    if(error){ showToast('Ошибка: ' + error.message); return null; }
+    return created.id;
   }
 
-  const previousOpenAdmin = window.openAdmin;
-  window.openAdmin = async function(){
-    if(previousOpenAdmin) await previousOpenAdmin();
-    setTimeout(rebindSaveButton, 150);
-    setTimeout(rebindSaveButton, 500);
+  window.adminUploadEpisodeVideo = async function(input){
+    const file = input.files?.[0]; if(!file) return;
+    const status = document.getElementById('admin-src-upload-status');
+    if(status) status.textContent = 'Загружаем видео…';
+    try{
+      const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
+      const path = `${crypto.randomUUID()}.${ext}`;
+      const { error } = await sb.storage.from('videos').upload(path, file, { upsert: true, contentType: file.type });
+      if(error) throw error;
+      const { data } = sb.storage.from('videos').getPublicUrl(path);
+      const urlField = document.getElementById('admin-src-video');
+      if(urlField) urlField.value = data.publicUrl;
+      if(status) status.textContent = 'Видео загружено ✓ — теперь нажмите «Добавить источник»';
+    }catch(e){
+      console.error('adminUploadEpisodeVideo', e);
+      if(status) status.textContent = 'Ошибка загрузки: ' + (e?.message || String(e));
+    }
   };
+
+  window.adminAddEpisodeSource = async function(){
+    const episodeId = await ensureEpisode();
+    if(!episodeId) return;
+    const dub = document.getElementById('admin-src-dub')?.value.trim() || 'Оригинал (субтитры)';
+    const quality = document.getElementById('admin-src-quality')?.value || '720p';
+    const url = document.getElementById('admin-src-video')?.value.trim();
+    if(!url){ showToast('Загрузите файл или вставьте ссылку на видео'); return; }
+
+    const { error } = await sb.from('episode_sources')
+      .upsert({ episode_id: episodeId, dub_name: dub, quality, video_url: url },
+              { onConflict: 'episode_id,dub_name,quality' });
+    if(error){ showToast('Ошибка: ' + error.message); return; }
+    showToast('Источник добавлен ✓');
+    const urlField = document.getElementById('admin-src-video');
+    if(urlField) urlField.value = '';
+    window.adminLoadEpisodeSources();
+  };
+
+  window.adminLoadEpisodeSources = async function(){
+    const box = document.getElementById('admin-src-list'); if(!box) return;
+    box.innerHTML = '<small>Загрузка...</small>';
+    const episodeId = await ensureEpisode();
+    if(!episodeId){ box.innerHTML = ''; return; }
+    const { data, error } = await sb.from('episode_sources')
+      .select('id,dub_name,quality,video_url').eq('episode_id', episodeId).order('dub_name');
+    if(error){ box.innerHTML = '<small>Ошибка загрузки.</small>'; return; }
+    if(!data || !data.length){ box.innerHTML = '<small>У этой серии пока нет источников.</small>'; return; }
+    box.innerHTML = data.map(s => `
+      <div class="admin-list-item">
+        <span>${escapeAdminHtml(s.dub_name)} · ${escapeAdminHtml(s.quality)}</span>
+        <button class="anime-action k19-danger" style="padding:5px 9px" onclick="adminDeleteEpisodeSource(${s.id})">Удалить</button>
+      </div>`).join('');
+  };
+
+  window.adminDeleteEpisodeSource = async function(id){
+    if(!confirm('Удалить этот источник видео?')) return;
+    const { error } = await sb.from('episode_sources').delete().eq('id', id);
+    if(error){ showToast('Ошибка: ' + error.message); return; }
+    window.adminLoadEpisodeSources();
+  };
+
+  function escapeAdminHtml(v){
+    return String(v ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));
+  }
+  function showToast(msg){
+    if(typeof window.showToast === 'function') window.showToast(msg);
+    else alert(msg);
+  }
 })();
 </script>
 
