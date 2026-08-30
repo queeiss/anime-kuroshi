@@ -6300,5 +6300,78 @@ html[data-theme="mono"] .k10-admin-tabs button.active{color:#000}
 })();
 </script>
 
+<script>
+/* KUROSHI — final, single source of truth for saving anime.
+   The file accumulated several older save handlers over time; this one
+   always wins by directly taking over the button, so fields like the
+   English alt title reliably save. */
+(function(){
+  const sb = window.sb;
+  function root(){ return document.querySelector('#profile-modal.k-admin-open .profile-content'); }
+  function field(id){ return root()?.querySelector('#'+CSS.escape(id)) || document.getElementById(id); }
+  function val(id){ return String(field(id)?.value ?? '').trim(); }
+
+  window.adminSaveAnimeFinal = async function(){
+    const r = root(); if(!r) return;
+    const btn = field('admin-anime-id')?.closest('.admin-card')?.querySelector('.btn-primary');
+    if(btn){ btn.disabled = true; btn.dataset.originalText = btn.dataset.originalText || btn.textContent; btn.textContent = 'Сохраняем…'; }
+    try{
+      const { data: adminCheck, error: adminErr } = await sb.rpc('is_admin');
+      if(adminErr || adminCheck !== true) throw new Error('Нет доступа к админ-панели');
+
+      const id = val('admin-anime-id');
+      const title = val('admin-anime-title');
+      if(!id) throw new Error('Укажите ID аниме');
+      if(!title) throw new Error('Укажите название');
+
+      const row = {
+        id,
+        title,
+        alternate_title_en: val('admin-anime-alt-title'),
+        genre: val('admin-anime-genre'),
+        year: Number(field('admin-anime-year')?.value) || null,
+        status: val('admin-anime-status'),
+        rating: 0,
+        poster: val('admin-anime-poster'),
+        description: field('admin-anime-description')?.value ?? '',
+        total_episodes: Number(field('admin-anime-episodes')?.value) || null
+      };
+
+      const { error } = await sb.from('anime').upsert(row, { onConflict: 'id' });
+      if(error) throw error;
+
+      if(typeof showToast === 'function') showToast('Аниме сохранено ✓');
+      if(window.refreshKuroshiCatalog) await window.refreshKuroshiCatalog();
+      if(window.k21RenderAnimeList) await window.k21RenderAnimeList().catch(()=>{});
+      if(window.k25LoadList) await window.k25LoadList().catch(()=>{});
+      if(window.k24LoadList) await window.k24LoadList().catch(()=>{});
+    }catch(e){
+      console.error('adminSaveAnimeFinal:', e);
+      if(typeof showToast === 'function') showToast('Ошибка сохранения: ' + (e?.message || String(e)));
+    }finally{
+      if(btn){ btn.disabled = false; btn.textContent = btn.dataset.originalText || 'Сохранить'; }
+    }
+  };
+
+  // Always take over the actual "Сохранить" button for the anime form,
+  // overriding whatever older handler was previously wired to it, every
+  // time the admin panel is (re)opened.
+  function rebindSaveButton(){
+    const r = root(); if(!r) return;
+    const idField = field('admin-anime-id'); if(!idField) return;
+    const card = idField.closest('.admin-card'); if(!card) return;
+    const btn = card.querySelector('.btn-primary'); if(!btn) return;
+    btn.onclick = (e)=>{ e.preventDefault(); window.adminSaveAnimeFinal(); };
+  }
+
+  const previousOpenAdmin = window.openAdmin;
+  window.openAdmin = async function(){
+    if(previousOpenAdmin) await previousOpenAdmin();
+    setTimeout(rebindSaveButton, 150);
+    setTimeout(rebindSaveButton, 500);
+  };
+})();
+</script>
+
 </body>
 </html>
