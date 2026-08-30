@@ -678,11 +678,29 @@
 .episode-list button{border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;border-radius:9px;padding:8px 11px;cursor:pointer}
 .episode-list button.watched{opacity:.65}
 .comments-box{margin-top:22px}
-.comment-form{display:flex;gap:8px;margin-top:10px}
-.comment-form textarea{flex:1;min-height:58px;resize:vertical}
+.comment-form{display:flex;gap:10px;margin-top:10px;align-items:flex-start}
+.comment-form textarea{
+  flex:1;min-height:64px;resize:vertical;
+  background:#0a0812;border:1px solid var(--line);border-radius:12px;
+  padding:12px 14px;color:var(--text);font:14px inherit;line-height:1.5;
+  outline:none;transition:border-color .2s,box-shadow .2s;
+}
+.comment-form textarea::placeholder{color:var(--text-faint)}
+.comment-form textarea:focus{border-color:var(--violet);box-shadow:0 0 0 3px rgba(139,92,246,0.15)}
+.comment-form .anime-action{align-self:flex-end}
 .comment-list{display:grid;gap:9px;margin-top:12px}
-.comment-item{padding:11px;border-radius:12px;background:rgba(255,255,255,.045)}
+.comment-item{padding:13px 14px;border-radius:12px;background:#100c1c;border:1px solid var(--line)}
 .comment-item small{opacity:.55}
+.comment-author{font-weight:800;font-size:12.5px;color:var(--violet-2);margin-bottom:2px}
+.comment-reactions{display:flex;gap:8px;margin-top:10px}
+.reaction-btn{
+  display:flex;align-items:center;gap:5px;border:1px solid rgba(255,255,255,.12);
+  background:rgba(255,255,255,.05);color:inherit;border-radius:999px;padding:5px 11px;
+  cursor:pointer;font-size:12.5px;transition:all .15s;
+}
+.reaction-btn:hover{background:rgba(255,255,255,.1)}
+.reaction-btn.active-like{background:rgba(214,139,255,.22);border-color:var(--violet-2);color:var(--violet-2)}
+.reaction-btn.active-dislike{background:rgba(255,90,110,.18);border-color:#ff8a98;color:#ff8a98}
 .continue-item{padding:12px;border-radius:12px;background:rgba(255,255,255,.045);margin-bottom:8px}
 .continue-item span{display:block;opacity:.65;margin:4px 0 8px}
 .progress-track{height:5px;background:rgba(255,255,255,.1);border-radius:10px;overflow:hidden}
@@ -2715,18 +2733,51 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         .select('id,user_id,anime_key,body,created_at')
         .eq('anime_key', key).order('created_at', { ascending: false });
       if (error) throw error;
-      return data || [];
+      const rows = data || [];
+      if (!rows.length) return [];
+
+      const ids = [...new Set(rows.map(r => r.user_id))];
+      const commentIds = rows.map(r => r.id);
+
+      const [{ data: profiles }, { data: reactions }, me] = await Promise.all([
+        sb.from('profiles').select('id,name,username').in('id', ids),
+        sb.from('comment_likes').select('comment_id,user_id,reaction').in('comment_id', commentIds),
+        user()
+      ]);
+
+      const nameById = {};
+      (profiles || []).forEach(p => { nameById[p.id] = p.username || p.name || 'Пользователь'; });
+
+      const likes = {}, dislikes = {}, myReaction = {};
+      (reactions || []).forEach(r => {
+        if (r.reaction === 'dislike') dislikes[r.comment_id] = (dislikes[r.comment_id] || 0) + 1;
+        else likes[r.comment_id] = (likes[r.comment_id] || 0) + 1;
+        if (me && String(r.user_id) === String(me.id)) myReaction[r.comment_id] = r.reaction;
+      });
+
+      return rows.map(r => ({
+        ...r,
+        author_name: nameById[r.user_id] || 'Пользователь',
+        likes: likes[r.id] || 0,
+        dislikes: dislikes[r.id] || 0,
+        my_reaction: myReaction[r.id] || null
+      }));
     },
 
-    async toggleCommentLike(commentId) {
+    async toggleCommentLike(commentId, reaction = 'like') {
       const u = await user(); if (!u) throw new Error('Войдите в аккаунт');
       const { data } = await sb.from('comment_likes')
-        .select('comment_id').eq('comment_id', commentId).eq('user_id', u.id).maybeSingle();
-      if (data) {
+        .select('reaction').eq('comment_id', commentId).eq('user_id', u.id).maybeSingle();
+      if (data && data.reaction === reaction) {
+        // Same reaction clicked again: remove it.
         await sb.from('comment_likes').delete()
           .eq('comment_id', commentId).eq('user_id', u.id);
       } else {
-        await sb.from('comment_likes').insert({ comment_id: commentId, user_id: u.id });
+        // No reaction yet, or switching from like<->dislike.
+        await sb.from('comment_likes').upsert(
+          { comment_id: commentId, user_id: u.id, reaction },
+          { onConflict: 'comment_id,user_id' }
+        );
       }
     },
 
@@ -2944,18 +2995,28 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     if(!rows.length){box.innerHTML='<small>Пока нет комментариев.</small>';return;}
     box.innerHTML=rows.map(c=>`
       <div class="comment-item">
+        <div class="comment-author">${esc(c.author_name||'Пользователь')}</div>
         <small>${new Date(c.created_at).toLocaleString('ru-RU')}</small>
         <div style="margin-top:5px;white-space:pre-wrap">${esc(c.body)}</div>
-        <button class="anime-action" style="margin-top:8px;padding:5px 9px" onclick="likeComment(${c.id})">♥</button>
+        <div class="comment-reactions">
+          <button class="reaction-btn ${c.my_reaction==='like'?'active-like':''}" onclick="reactToComment(${c.id},'like')">
+            ♥ <span>${c.likes||0}</span>
+          </button>
+          <button class="reaction-btn dislike ${c.my_reaction==='dislike'?'active-dislike':''}" onclick="reactToComment(${c.id},'dislike')">
+            💔 <span>${c.dislikes?('-'+c.dislikes):0}</span>
+          </button>
+        </div>
       </div>`).join('');
   }
 
-  window.likeComment=async function(id){
+  window.reactToComment=async function(id,reaction){
     try{
-      await window.KuroshiV3.toggleCommentLike(id);
-      if(typeof showToast==='function')showToast('Готово ');
+      await window.KuroshiV3.toggleCommentLike(id,reaction);
+      const comments=await window.KuroshiV3.comments(activeAnime);
+      renderComments(comments);
     }catch(e){if(typeof showToast==='function')showToast(e.message||'Войдите в аккаунт');}
   };
+  window.likeComment=id=>window.reactToComment(id,'like');
 
   window.openEpisode=async function(ep){
     if(!activeAnime)return;
