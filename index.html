@@ -109,12 +109,12 @@
     font-family:'Noto Serif JP', serif; font-size:12px; color:var(--text-faint);
     writing-mode: vertical-rl; letter-spacing:2px;
   }
-  .nav-burger{
-    display:none; width:38px; height:38px; align-items:center; justify-content:center;
-    background:var(--surface); border:1px solid var(--line); border-radius:9px; color:var(--text);
+  .mobile-search-btn{
+    display:none; width:36px; height:36px; align-items:center; justify-content:center;
+    background:var(--surface); border:1px solid var(--line); border-radius:9px; color:var(--text-dim);
     cursor:pointer; flex:none;
   }
-  .nav-burger svg{width:18px; height:18px;}
+  .mobile-search-btn svg{width:16px; height:16px;}
   .nav-links{display:flex; align-items:center; gap:30px; font-size:14.5px; font-weight:600; color:var(--text-dim);}
   .nav-links button{
     position:relative; padding:6px 0; transition:color .25s; background:none; border:none;
@@ -132,7 +132,6 @@
   .profile-save-btn:disabled{cursor:default;opacity:.8;filter:saturate(.8);}
   .nav-right{display:flex; align-items:center; gap:14px;}
   .header-utility{display:flex; align-items:center; gap:14px;}
-  #utility-anchor{display:none;}
   .auth-submit.save-loading{pointer-events:none;opacity:.78;transform:scale(.98);}
   .auth-submit.save-loading::after{content:' ✓';}
   .avatar-option.selected{outline:2px solid var(--violet);outline-offset:2px;transform:scale(1.04);}
@@ -578,30 +577,32 @@
   }
 
   @media (max-width:980px){
-    .nav-burger{display:flex;}
-    .nav-links{
-      display:none; position:absolute; top:100%; left:0; right:0;
-      flex-direction:column; align-items:stretch; gap:2px; padding:10px;
-      background:var(--bg); border-bottom:1px solid var(--line);
-      box-shadow:0 20px 40px rgba(0,0,0,0.3);
-    }
-    .nav-links.open{display:flex;}
-    .nav-links button{
-      padding:13px 14px; border-radius:9px; text-align:left; width:100%;
-    }
-    .nav-links button:hover, .nav-links button.active{background:var(--surface);}
-    .nav-links button.active::after{display:none;}
-    .nav-links .header-utility{
-      justify-content:space-between; padding:6px 4px 14px; margin-bottom:8px;
-      border-bottom:1px solid var(--line);
-    }
-    nav{position:relative;}
+    .nav-links{display:none;}
     .search{display:none;}
+    .mobile-search-btn{display:flex;}
+    nav{position:relative;}
     .hero-inner{grid-template-columns:1fr;}
     h1.title{font-size:54px;}
     .grid{grid-template-columns:repeat(2,1fr);}
     .cw-list{grid-template-columns:repeat(2,1fr);}
+
+    .bottom-nav{display:flex;}
+    body{padding-bottom:64px;}
   }
+
+  .bottom-nav{
+    display:none; position:fixed; left:0; right:0; bottom:0; z-index:80;
+    background:var(--surface); border-top:1px solid var(--line);
+    padding:6px 4px calc(6px + env(safe-area-inset-bottom));
+    align-items:stretch; justify-content:space-around;
+  }
+  .bottom-nav-item{
+    flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+    padding:6px 2px; background:none; border:none; color:var(--text-faint); cursor:pointer;
+    font:600 10.5px inherit;
+  }
+  .bottom-nav-item svg{width:21px; height:21px;}
+  .bottom-nav-item.active{color:var(--violet-2);}
 
   /* ===== PHONE FIXES ===== */
   @media (max-width:640px){
@@ -616,6 +617,7 @@
     .theme-toggle{padding:4px;}
     .theme-btn{width:28px; height:28px;}
     .theme-btn svg{width:14px; height:14px;}
+    .mobile-search-btn{width:32px; height:32px;}
     .auth-buttons{gap:8px;}
     .btn-login,.btn-signup{padding:9px 13px; font-size:12.5px; white-space:nowrap;}
     .avatar-chip{padding:5px 10px 5px 5px; font-size:12px;}
@@ -653,6 +655,8 @@
     .grid{grid-template-columns:1fr 1fr; gap:10px;}
     .cw-list{grid-template-columns:1fr;}
     h1.title{font-size:32px;}
+    #nav-name{display:none;}
+    .avatar-chip{padding:5px;}
   }
 </style>
 
@@ -701,6 +705,7 @@
 .reaction-btn:hover{background:rgba(255,255,255,.1)}
 .reaction-btn.active-like{background:rgba(214,139,255,.22);border-color:var(--violet-2);color:var(--violet-2)}
 .reaction-btn.active-dislike{background:rgba(255,90,110,.18);border-color:#ff8a98;color:#ff8a98}
+.reaction-btn .broken-heart{flex:none}
 .continue-item{padding:12px;border-radius:12px;background:rgba(255,255,255,.045);margin-bottom:8px}
 .continue-item span{display:block;opacity:.65;margin:4px 0 8px}
 .progress-track{height:5px;background:rgba(255,255,255,.1);border-radius:10px;overflow:hidden}
@@ -1038,9 +1043,6 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       <span class="logo-mark">KUROSHI</span>
       <span class="logo-jp">黒紫</span>
     </button>
-    <button class="nav-burger" id="nav-burger" onclick="toggleMobileNav()" aria-label="Меню">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
-    </button>
     <div class="nav-links" id="nav-links">
       <button class="active" data-nav="home" onclick="showPage('home')">Главная</button>
       <button data-nav="catalog" onclick="showPage('catalog')">Каталог</button>
@@ -1052,7 +1054,9 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
         <input type="text" placeholder="Найти аниме, тайтл..." onkeydown="if(event.key==='Enter'){goToCatalogSearch(this.value);this.blur();}">
       </div>
-      <span id="utility-anchor"></span>
+      <button class="mobile-search-btn" onclick="showPage('catalog');setTimeout(()=>document.getElementById('catalog-search')?.focus(),200)" aria-label="Поиск">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
       <div class="header-utility" id="header-utility">
         <div class="theme-toggle">
           <button class="theme-btn active" data-theme-btn="violet" title="Фиолетовая тема">
@@ -1548,6 +1552,25 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   </div>
 </div>
 
+<nav class="bottom-nav" id="bottom-nav">
+  <button class="bottom-nav-item active" data-bnav="home" onclick="showPage('home')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+    <span>Главная</span>
+  </button>
+  <button class="bottom-nav-item" data-bnav="catalog" onclick="showPage('catalog')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg>
+    <span>Каталог</span>
+  </button>
+  <button class="bottom-nav-item" data-bnav="users" onclick="showPage('users')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c.6-3.6 3.3-6 6.5-6s5.9 2.4 6.5 6"/><circle cx="17.5" cy="9" r="2.6"/><path d="M15.8 14.2c2.3.4 4.1 2.3 4.6 5"/></svg>
+    <span>Пользователи</span>
+  </button>
+  <button class="bottom-nav-item" data-bnav="news" onclick="showPage('news')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="14" height="16" rx="1.5"/><path d="M17 8h4v10a2 2 0 0 1-2 2h-2"/><path d="M6.5 8h7M6.5 11.5h7M6.5 15h4"/></svg>
+    <span>Новости</span>
+  </button>
+</nav>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -1674,42 +1697,6 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     }
   }
 
-  function toggleMobileNav(){
-    document.getElementById('nav-links')?.classList.toggle('open');
-  }
-  function closeMobileNav(){
-    document.getElementById('nav-links')?.classList.remove('open');
-  }
-  document.addEventListener('click',(e)=>{
-    const links=document.getElementById('nav-links'), burger=document.getElementById('nav-burger');
-    if(!links || !links.classList.contains('open'))return;
-    if(links.contains(e.target) || burger?.contains(e.target))return;
-    closeMobileNav();
-  });
-
-  // On mobile, tuck the theme switcher + notification bell into the same
-  // dropdown as the nav links, instead of crowding the header into a messy
-  // second row. On desktop they move back to their normal spot in the header.
-  function layoutHeaderControls(){
-    const utility=document.getElementById('header-utility');
-    const anchor=document.getElementById('utility-anchor');
-    const navLinks=document.getElementById('nav-links');
-    if(!utility || !anchor || !navLinks) return;
-    const isMobile=window.innerWidth<=980;
-    if(isMobile){
-      if(navLinks.firstElementChild!==utility) navLinks.insertBefore(utility, navLinks.firstChild);
-    }else{
-      if(utility.previousElementSibling!==anchor) anchor.after(utility);
-    }
-  }
-  window.addEventListener('load',layoutHeaderControls);
-  let headerLayoutTimer;
-  window.addEventListener('resize',()=>{
-    clearTimeout(headerLayoutTimer);
-    headerLayoutTimer=setTimeout(layoutHeaderControls,120);
-  });
-  layoutHeaderControls();
-
   function showPage(page){
     document.getElementById('page-home').classList.toggle('hidden', page!=='home');
     document.getElementById('page-catalog').classList.toggle('hidden', page!=='catalog');
@@ -1720,7 +1707,9 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     document.querySelectorAll('.nav-links button').forEach(b=>b.classList.remove('active'));
     const btn = document.querySelector(`.nav-links button[data-nav="${page}"]`);
     if(btn) btn.classList.add('active');
-    closeMobileNav();
+    document.querySelectorAll('.bottom-nav-item').forEach(b=>b.classList.remove('active'));
+    const bbtn = document.querySelector(`.bottom-nav-item[data-bnav="${page}"]`);
+    if(bbtn) bbtn.classList.add('active');
     window.scrollTo({top:0, behavior:'smooth'});
     if(page==='catalog') renderCatalogGrid();
     if(page==='users') renderUsers();
@@ -3003,7 +2992,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
             ♥ <span>${c.likes||0}</span>
           </button>
           <button class="reaction-btn dislike ${c.my_reaction==='dislike'?'active-dislike':''}" onclick="reactToComment(${c.id},'dislike')">
-            💔 <span>${c.dislikes?('-'+c.dislikes):0}</span>
+            <svg class="broken-heart" viewBox="0 0 24 24" width="13" height="13" fill="currentColor"><path d="M12 21s-6.7-4.3-9.3-8.2C1 10 1.6 6.5 4.4 5c2-1 4.4-.4 5.7 1.3l.4.5.9-1.2C12.7 4 15.1 3.4 17.1 4.4c2.7 1.5 3.3 5 1.7 7.8C16.2 16.1 12 20 12 20z"/><path d="M12.4 3.7 10.3 9l2.9 2-2.3 5 2.3 4.6" fill="none" stroke="var(--bg)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/></svg> <span>${c.dislikes?('-'+c.dislikes):0}</span>
           </button>
         </div>
       </div>`).join('');
