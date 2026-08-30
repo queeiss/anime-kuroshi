@@ -673,7 +673,15 @@
 .anime-detail-main h2{font-size:34px;margin:0 0 8px}
 .anime-meta{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 18px}
 .anime-detail-desc{line-height:1.7;opacity:.82;margin-bottom:20px}
-.anime-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px}
+.anime-actions{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.library-status-row{margin-bottom:22px}
+.library-status-row .anime-action{font-size:12.5px;padding:9px 14px}
+.anime-action.active-status{background:linear-gradient(120deg,var(--violet),var(--magenta));border-color:transparent;color:#fff}
+html[data-theme="mono"] .anime-action.active-status{color:#000}
+.fav-btn.active-status{background:rgba(214,139,255,.18);border-color:var(--violet-2);color:var(--violet-2)}
+.bookmark-row:not(:empty){margin-bottom:18px}
+.bookmark-btn{display:flex;align-items:center;gap:8px;width:100%;justify-content:center;border-color:var(--violet-2);color:var(--violet-2)}
+.bookmark-note{display:flex;align-items:center;gap:8px;justify-content:center;padding:11px;color:var(--text-faint);font-size:12.5px;border:1px dashed var(--line);border-radius:10px}
 .anime-action{border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:inherit;border-radius:10px;padding:9px 13px;cursor:pointer}
 .anime-action:hover{background:rgba(255,255,255,.11)}
 .rating-box{padding:15px;border:1px solid rgba(255,255,255,.1);border-radius:14px;margin-bottom:18px}
@@ -2706,6 +2714,12 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   };
 
   window.toggleLibrary = async function (anime, category) {
+    // Every call site in the app passes a catalog index (a number), not an
+    // anime object — resolve it here so this actually works.
+    if (typeof anime === 'number') {
+      anime = (window.__KUROSHI_CATALOG__ || [])[anime];
+    }
+    if (!anime) return;
     const lib = await cloudLibrary();
     const list = lib[category] || (lib[category] = []);
 
@@ -2732,7 +2746,58 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     if (typeof window.renderProfileModal === 'function') {
       try { window.renderProfileModal(); } catch (_) {}
     }
+    if (typeof window.refreshAnimeStatusUI === 'function') {
+      try { window.refreshAnimeStatusUI(anime); } catch (_) {}
+    }
     return lib;
+  };
+
+  // Status categories (watching/planned/dropped/later) are mutually
+  // exclusive; favorites is a separate flag that can combine with any of them.
+  window.setAnimeStatus = async function(anime, status){
+    if (typeof anime === 'number') anime = (window.__KUROSHI_CATALOG__ || [])[anime];
+    if (!anime) return;
+    const lib = await cloudLibrary();
+    const statusCats = ['watching','planned','dropped','later'];
+    const key = String(anime.id ?? anime.title ?? anime.name);
+    let wasActive = false;
+    statusCats.forEach(cat=>{
+      const list = lib[cat] || (lib[cat] = []);
+      const idx = list.findIndex(x => String(x.id ?? x.title ?? x.name) === key);
+      if (idx >= 0) {
+        if (cat === status) wasActive = true;
+        list.splice(idx, 1);
+      }
+    });
+    if (!wasActive) {
+      const list = lib[status] || (lib[status] = []);
+      list.push({
+        id: anime.id ?? null,
+        title: anime.title ?? anime.name ?? '',
+        status: anime.status ?? '',
+        year: anime.year ?? '',
+        genre: anime.genre ?? '',
+        poster: anime.poster ?? anime.image ?? ''
+      });
+    }
+    await saveCloudLibrary(lib);
+    if (typeof window.renderProfileModal === 'function') {
+      try { window.renderProfileModal(); } catch (_) {}
+    }
+    if (typeof window.refreshAnimeStatusUI === 'function') {
+      try { window.refreshAnimeStatusUI(anime); } catch (_) {}
+    }
+    return lib;
+  };
+
+  window.getLibraryState = async function(anime){
+    if (typeof anime === 'number') anime = (window.__KUROSHI_CATALOG__ || [])[anime];
+    if (!anime) return { status: null, favorite: false };
+    const lib = await cloudLibrary();
+    const key = String(anime.id ?? anime.title ?? anime.name);
+    const inCat = (cat) => (lib[cat] || []).some(x => String(x.id ?? x.title ?? x.name) === key);
+    const status = ['watching','planned','dropped','later'].find(inCat) || null;
+    return { status, favorite: inCat('favorites') };
   };
 
   // Sync library after authentication and when the page becomes visible.
@@ -2778,11 +2843,20 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       const u = await user(); if (!u) return;
       const key = String(anime.id ?? anime.title);
       const total = Number(totalEpisodes) || null;
-      const percent = total ? Math.min(100, Math.round(Number(episode) / total * 100)) : 0;
+      const epNum = Number(episode) || 0;
+
+      // The bookmark should reflect the furthest episode reached, not just
+      // the last one opened — so rewatching an earlier episode shouldn't
+      // move the bookmark backwards.
+      const { data: existing } = await sb.from('anime_progress')
+        .select('episode').eq('user_id', u.id).eq('anime_key', key).maybeSingle();
+      const bookmarkEp = Math.max(epNum, existing?.episode || 0);
+      const percent = total ? Math.min(100, Math.round(bookmarkEp / total * 100)) : 0;
+
       const { error } = await sb.from('anime_progress').upsert({
         user_id: u.id, anime_key: key,
         anime_title: anime.title ?? anime.name ?? '',
-        episode: Number(episode) || 0,
+        episode: bookmarkEp,
         total_episodes: total,
         progress_percent: percent,
         last_watched_at: new Date().toISOString()
@@ -3082,8 +3156,13 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
           </div>
           <div class="anime-actions">
             <button class="anime-action watch-btn" id="watch-progress-btn" onclick="startWatching()">▶ Начать смотреть <span id="watch-progress-label">0 / ${total}</span></button>
-            <button class="anime-action" onclick="toggleLibrary(${catalogRef().indexOf(item)},'favorites')">♥ Любимое</button>
-            <button class="anime-action" onclick="toggleLibrary(${catalogRef().indexOf(item)},'planned')">＋ В планах</button>
+            <button class="anime-action fav-btn" id="lib-btn-favorites" onclick="toggleLibrary(${catalogRef().indexOf(item)},'favorites')">♥ Любимое</button>
+          </div>
+          <div class="anime-actions library-status-row" id="library-status-row">
+            <button class="anime-action" id="lib-btn-watching" onclick="setAnimeStatus(${catalogRef().indexOf(item)},'watching')">Смотрю</button>
+            <button class="anime-action" id="lib-btn-planned" onclick="setAnimeStatus(${catalogRef().indexOf(item)},'planned')">В планах</button>
+            <button class="anime-action" id="lib-btn-later" onclick="setAnimeStatus(${catalogRef().indexOf(item)},'later')">Досмотрю позже</button>
+            <button class="anime-action" id="lib-btn-dropped" onclick="setAnimeStatus(${catalogRef().indexOf(item)},'dropped')">Брошено</button>
           </div>
 
           <div class="anime-tabs" id="anime-tabs">
@@ -3140,7 +3219,20 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         if(label) label.textContent = `${watchedEp} / ${total}`;
         if(btn && watchedEp>0) btn.firstChild.textContent = watchedEp>=total ? '↻ Смотреть заново ' : '▶ Продолжить смотреть ';
       }
+      await refreshAnimeStatusUI(item);
     } catch(e){ console.error(e); }
+  };
+
+  window.refreshAnimeStatusUI = async function(anime){
+    if(!window.getLibraryState) return;
+    const target = (anime && activeAnime && String(anime.id ?? anime.title)===String(activeAnime.id ?? activeAnime.title)) ? activeAnime : null;
+    if(!target) return; // only refresh buttons currently on screen for this anime
+    const state = await window.getLibraryState(target);
+    document.querySelectorAll('.library-status-row .anime-action').forEach(b=>b.classList.remove('active-status'));
+    if(state.status){
+      document.getElementById('lib-btn-'+state.status)?.classList.add('active-status');
+    }
+    document.getElementById('lib-btn-favorites')?.classList.toggle('active-status', !!state.favorite);
   };
 
   window.startWatching = function(){
@@ -3267,6 +3359,12 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     }else if(typeof markEpisodeWatched==='function'){
       await markEpisodeWatched(activeAnime.title,ep);
     }
+    if(typeof window.setAnimeStatus==='function' && currentUser()){
+      try{
+        const state=await window.getLibraryState(activeAnime);
+        if(!state.status) await window.setAnimeStatus(activeAnime,'watching');
+      }catch(e){console.error('auto watching status',e);}
+    }
     const btn=document.getElementById('ep-'+ep);
     if(btn)btn.classList.add('watched');
     activeEpisode=ep;
@@ -3293,6 +3391,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         <span>Серия ${ep} / ${total}</span>
         <button class="anime-action" ${ep>=total?'disabled':''} onclick="openEpisode(${ep+1})">Следующая ›</button>
       </div>
+      <div class="bookmark-row" id="bookmark-row"></div>
       ${buildEpisodeStrip(total,ep,'watch-ep')}
       <div class="comments-box">
         <strong>Комментарии к серии ${ep}</strong>
@@ -3311,6 +3410,20 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       if(window.KuroshiV3){
         const comments = await window.KuroshiV3.comments(activeAnime,ep);
         renderComments(comments,'comment-list');
+
+        const prog = await window.KuroshiV3.getProgress(activeAnime);
+        const bookmarkEp = prog?.episode || 0;
+        const row=document.getElementById('bookmark-row');
+        if(row){
+          const bookmarkIcon='<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1z"/></svg>';
+          if(bookmarkEp>0 && bookmarkEp!==ep){
+            row.innerHTML=`<button class="btn-ghost bookmark-btn" onclick="openEpisode(${bookmarkEp})">${bookmarkIcon} Закладка: серия ${bookmarkEp} — перейти</button>`;
+          }else if(bookmarkEp===ep){
+            row.innerHTML=`<div class="bookmark-note">${bookmarkIcon} Закладка стоит на этой серии</div>`;
+          }else{
+            row.innerHTML='';
+          }
+        }
       }
     }catch(e){ console.error(e); }
   }
