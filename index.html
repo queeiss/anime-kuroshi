@@ -688,18 +688,32 @@
 .episode-list button.active-episode{background:linear-gradient(120deg,var(--violet),var(--magenta));border-color:transparent;color:#fff}
 html[data-theme="mono"] .episode-list button.active-episode{color:#000}
 .episodes-count{font-weight:400;color:var(--text-faint);font-size:12px}
-.episode-toolbar{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 14px;align-items:center}
-.episode-toolbar .sort-select{flex:1;min-width:110px}
-.episode-jump{display:flex;gap:8px}
-.episode-jump input{
-  width:88px;background:var(--surface-2);border:1px solid rgba(255,255,255,.14);border-radius:9px;
-  padding:9px 10px;color:var(--text);font:inherit;outline:none;
+.episode-strip-box{margin:20px 0 24px}
+.episode-strip-wrap{display:flex;align-items:center;gap:8px}
+.strip-arrow,.strip-icon-btn{
+  flex:none;width:36px;height:36px;border-radius:9px;border:1px solid var(--line);
+  background:var(--surface);color:var(--text-dim);display:flex;align-items:center;justify-content:center;cursor:pointer;
 }
-.episode-jump input:focus{border-color:var(--violet)}
-.episode-jump .anime-action{padding:9px 14px;white-space:nowrap}
-.watch-episodes-box{margin-top:24px;margin-bottom:24px;padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.strip-arrow:hover,.strip-icon-btn:hover{border-color:var(--violet);color:var(--text)}
+.strip-arrow svg,.strip-icon-btn svg{width:16px;height:16px}
+.episode-strip{
+  flex:1;display:flex;gap:8px;overflow-x:auto;scroll-behavior:smooth;padding:2px 0;
+  scrollbar-width:thin;
+}
+.episode-strip button{
+  flex:none;padding:11px 16px;border-radius:10px;border:1px solid var(--line);
+  background:var(--surface);color:var(--text-dim);font:600 13px inherit;cursor:pointer;white-space:nowrap;transition:all .15s;
+}
+.episode-strip button:hover{border-color:var(--violet);color:var(--text)}
+.episode-strip button.active-episode{background:linear-gradient(120deg,var(--violet),var(--magenta));border-color:transparent;color:#fff}
+html[data-theme="mono"] .episode-strip button.active-episode{color:#000}
+.episode-strip-search{display:flex;gap:8px;margin-top:10px}
+.episode-strip-search input{
+  width:140px;background:var(--surface-2);border:1px solid rgba(255,255,255,.14);border-radius:9px;
+  padding:9px 12px;color:var(--text);font:inherit;outline:none;
+}
+.episode-strip-search input:focus{border-color:var(--violet)}
 .watch-comments-link{width:100%;justify-content:center;margin-bottom:32px}
-.watch-episodes-box .episode-list{max-height:220px;overflow-y:auto}
 .comments-box{margin-top:22px}
 .similar-section{margin-top:36px}
 .similar-head{margin-bottom:18px}
@@ -2881,6 +2895,14 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       return data || [];
     },
 
+    async getProgress(anime) {
+      const u = await user(); if (!u) return null;
+      const key = String(anime.id ?? anime.title);
+      const { data } = await sb.from('anime_progress')
+        .select('episode,total_episodes').eq('user_id', u.id).eq('anime_key', key).maybeSingle();
+      return data || null;
+    },
+
     async achievements() {
       const u = await user(); if (!u) return [];
       const { data } = await sb.from('user_achievements')
@@ -2996,63 +3018,43 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
   function esc(v){return String(v ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 
-  // For anime with a huge episode count (long-running shonen etc.), render
-  // episodes in chunks of 50 with a range picker + jump-to-episode input,
-  // instead of one giant unscrollable wall of buttons.
-  const EPISODES_PER_PAGE=50;
-  function episodeRanges(total){
-    const ranges=[];
-    for(let start=1;start<=total;start+=EPISODES_PER_PAGE){
-      ranges.push([start,Math.min(start+EPISODES_PER_PAGE-1,total)]);
-    }
-    return ranges;
-  }
-  function buildEpisodeBox(total,activeEp,idPrefix,heading,extraClass){
-    const boxClass='episodes-box'+(extraClass?(' '+extraClass):'');
-    if(total<=EPISODES_PER_PAGE){
-      return `<div class="${boxClass}">
-        <strong>${heading}</strong>
-        <div class="episode-list" id="${idPrefix}-list">
-          ${Array.from({length:total},(_,i)=>`<button id="${idPrefix}-${i+1}" class="${i+1===activeEp?'active-episode':''}" onclick="openEpisode(${i+1})">${i+1}</button>`).join('')}
+  // Long-running shonen etc. can have hundreds/thousands of episodes, so the
+  // watch page shows them as a horizontally scrollable strip with arrows and
+  // a search-to-jump box, instead of one giant wall of buttons.
+  function buildEpisodeStrip(total,activeEp,idPrefix){
+    return `<div class="episode-strip-box">
+      <div class="episode-strip-wrap">
+        <button class="strip-arrow" onclick="scrollEpisodeStrip('${idPrefix}',-1)" aria-label="Назад">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <button class="strip-icon-btn" onclick="toggleEpisodeSearch('${idPrefix}')" aria-label="Найти серию">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
+        <div class="episode-strip" id="${idPrefix}-strip">
+          ${Array.from({length:total},(_,i)=>`<button id="${idPrefix}-ep-${i+1}" class="${i+1===activeEp?'active-episode':''}" onclick="openEpisode(${i+1})">${i+1} эпизод</button>`).join('')}
         </div>
-      </div>`;
-    }
-    const ranges=episodeRanges(total);
-    const activeRangeIdx=Math.max(0,ranges.findIndex(([s,e])=>activeEp>=s&&activeEp<=e));
-    return `<div class="${boxClass}">
-      <strong>${heading} <span class="episodes-count">(${total})</span></strong>
-      <div class="episode-toolbar">
-        <select class="sort-select" id="${idPrefix}-range" onchange="renderEpisodeRange('${idPrefix}',${total},Number(this.value))">
-          ${ranges.map(([s,e],i)=>`<option value="${i}" ${i===activeRangeIdx?'selected':''}>${s}–${e}</option>`).join('')}
-        </select>
-        <div class="episode-jump">
-          <input type="number" id="${idPrefix}-jump-input" min="1" max="${total}" placeholder="№ серии">
-          <button class="anime-action" onclick="jumpToEpisode('${idPrefix}',${total},document.getElementById('${idPrefix}-jump-input').value)">Перейти</button>
-        </div>
+        <button class="strip-arrow" onclick="scrollEpisodeStrip('${idPrefix}',1)" aria-label="Вперёд">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+        </button>
       </div>
-      <div class="episode-list" id="${idPrefix}-list"></div>
+      <div class="episode-strip-search hidden" id="${idPrefix}-search-box">
+        <input type="number" id="${idPrefix}-search-input" min="1" max="${total}" placeholder="Номер серии" onkeydown="if(event.key==='Enter')jumpEpisodeStrip('${idPrefix}',${total})">
+        <button class="anime-action" onclick="jumpEpisodeStrip('${idPrefix}',${total})">Найти</button>
+      </div>
     </div>`;
   }
-  window.renderEpisodeRange=function(idPrefix,total,rangeIdx,activeEp){
-    const ranges=episodeRanges(total);
-    const [start,end]=ranges[rangeIdx]||ranges[0];
-    const list=document.getElementById(idPrefix+'-list');
-    if(!list)return;
-    let html='';
-    for(let i=start;i<=end;i++){
-      html+=`<button id="${idPrefix}-${i}" class="${i===activeEp?'active-episode':''}" onclick="openEpisode(${i})">${i}</button>`;
-    }
-    list.innerHTML=html;
+  window.scrollEpisodeStrip=function(idPrefix,dir){
+    document.getElementById(idPrefix+'-strip')?.scrollBy({left:dir*260,behavior:'smooth'});
   };
-  window.jumpToEpisode=function(idPrefix,total,value){
+  window.toggleEpisodeSearch=function(idPrefix){
+    const box=document.getElementById(idPrefix+'-search-box');
+    box?.classList.toggle('hidden');
+    if(box && !box.classList.contains('hidden')) document.getElementById(idPrefix+'-search-input')?.focus();
+  };
+  window.jumpEpisodeStrip=function(idPrefix,total){
+    const value=document.getElementById(idPrefix+'-search-input')?.value;
     const ep=Math.min(total,Math.max(1,parseInt(value,10)||1));
-    const ranges=episodeRanges(total);
-    const rangeIdx=Math.max(0,ranges.findIndex(([s,e])=>ep>=s&&ep<=e));
-    const select=document.getElementById(idPrefix+'-range');
-    if(select) select.value=rangeIdx;
-    renderEpisodeRange(idPrefix,total,rangeIdx,idPrefix==='watch-ep'?activeEpisode:undefined);
-    const btn=document.getElementById(idPrefix+'-'+ep);
-    if(btn) btn.scrollIntoView({behavior:'smooth',block:'nearest'});
+    openEpisode(ep);
   };
 
 
@@ -3079,7 +3081,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
             ${tags}
           </div>
           <div class="anime-actions">
-            <button class="anime-action" onclick="openEpisode(1)">▶ Смотреть</button>
+            <button class="anime-action watch-btn" id="watch-progress-btn" onclick="startWatching()">▶ Начать смотреть <span id="watch-progress-label">0 / ${total}</span></button>
             <button class="anime-action" onclick="toggleLibrary(${catalogRef().indexOf(item)},'favorites')">♥ Любимое</button>
             <button class="anime-action" onclick="toggleLibrary(${catalogRef().indexOf(item)},'planned')">＋ В планах</button>
           </div>
@@ -3099,8 +3101,6 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
               </div>
               <small class="rating-hint">Нажми на свою оценку ещё раз, чтобы убрать её</small>
             </div>
-
-            ${buildEpisodeBox(total,0,'ep','Серии')}
           </div>
 
           <div class="anime-tab-pane hidden" id="anime-tab-comments">
@@ -3121,7 +3121,6 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       </div>`;
 
     renderSimilarTitles(item);
-    if(total>EPISODES_PER_PAGE) renderEpisodeRange('ep',total,0);
 
     try {
       if(window.KuroshiV3){
@@ -3133,8 +3132,24 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         }
         const reviews = await window.KuroshiV3.comments(item);
         renderComments(reviews,'review-list');
+
+        const prog = await window.KuroshiV3.getProgress(item);
+        const watchedEp = prog?.episode || 0;
+        const label=document.getElementById('watch-progress-label');
+        const btn=document.getElementById('watch-progress-btn');
+        if(label) label.textContent = `${watchedEp} / ${total}`;
+        if(btn && watchedEp>0) btn.firstChild.textContent = watchedEp>=total ? '↻ Смотреть заново ' : '▶ Продолжить смотреть ';
       }
     } catch(e){ console.error(e); }
+  };
+
+  window.startWatching = function(){
+    if(!activeAnime) return;
+    const total = activeAnime.totalEpisodes || 1;
+    const label = document.getElementById('watch-progress-label')?.textContent || '';
+    const watched = parseInt(label,10) || 0;
+    const next = watched>0 && watched<total ? watched+1 : (watched>=total ? 1 : 1);
+    openEpisode(next);
   };
 
   window.switchAnimeTab = function(tab){
@@ -3278,7 +3293,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         <span>Серия ${ep} / ${total}</span>
         <button class="anime-action" ${ep>=total?'disabled':''} onclick="openEpisode(${ep+1})">Следующая ›</button>
       </div>
-      ${buildEpisodeBox(total,ep,'watch-ep','Серии','watch-episodes-box')}
+      ${buildEpisodeStrip(total,ep,'watch-ep')}
       <div class="comments-box">
         <strong>Комментарии к серии ${ep}</strong>
         <div class="comment-form">
@@ -3289,12 +3304,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       </div>
       <button class="btn-ghost watch-comments-link" onclick="showPage('anime');switchAnimeTab('comments');window.scrollTo({top:0,behavior:'smooth'})">Обсудить аниме целиком в комментариях к тайтлу</button>`;
 
-    if(total>EPISODES_PER_PAGE){
-      const ranges=episodeRanges(total);
-      const rangeIdx=Math.max(0,ranges.findIndex(([s,e])=>ep>=s&&ep<=e));
-      renderEpisodeRange('watch-ep',total,rangeIdx,ep);
-    }
-    const activeBtn=document.getElementById('watch-ep-'+ep);
+    const activeBtn=document.getElementById('watch-ep-ep-'+ep);
     if(activeBtn) activeBtn.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
 
     try{
