@@ -348,6 +348,15 @@
     padding:12px 14px; color:var(--text); font-size:13.5px; font-family:inherit; outline:none; transition:border-color .2s;
   }
   .field input:focus{border-color:var(--violet);}
+  .password-wrap{position:relative;}
+  .password-wrap input{padding-right:42px;}
+  .toggle-password{
+    position:absolute; right:5px; top:50%; transform:translateY(-50%);
+    width:30px; height:30px; display:flex; align-items:center; justify-content:center;
+    background:none; border:none; cursor:pointer; color:var(--text-faint); transition:color .2s;
+  }
+  .toggle-password:hover{color:var(--text);}
+  .toggle-password svg{width:17px; height:17px;}
   .auth-submit{
     width:100%; background:linear-gradient(120deg,var(--violet),var(--magenta)); color:#fff; font-weight:700;
     font-size:14px; padding:13px; border-radius:9px; border:none; cursor:pointer; margin-top:6px; box-shadow:var(--shadow-glow);
@@ -547,6 +556,58 @@
     h1.title{font-size:54px;}
     .grid{grid-template-columns:repeat(2,1fr);}
     .cw-list{grid-template-columns:repeat(2,1fr);}
+  }
+
+  /* ===== PHONE FIXES ===== */
+  @media (max-width:640px){
+    nav{
+      flex-wrap:wrap; padding:14px 16px; gap:10px;
+    }
+    .logo-jp{display:none;}
+    .logo-mark{font-size:24px;}
+    .nav-right{
+      flex:1 1 auto; justify-content:flex-end; flex-wrap:wrap; row-gap:8px; gap:8px;
+    }
+    .theme-toggle{padding:4px;}
+    .theme-btn{width:28px; height:28px;}
+    .theme-btn svg{width:14px; height:14px;}
+    .auth-buttons{gap:8px;}
+    .btn-login,.btn-signup{padding:9px 13px; font-size:12.5px; white-space:nowrap;}
+    .avatar-chip{padding:5px 10px 5px 5px; font-size:12px;}
+
+    .hero{padding:36px 16px 24px;}
+    .brushstroke{width:380px; height:380px; top:-80px; left:-100px;}
+    h1.title{font-size:38px;}
+    .hero-desc{font-size:14px;}
+    .hero-meta{gap:14px; row-gap:8px; flex-wrap:wrap;}
+    .hero-actions{flex-wrap:wrap;}
+    .btn-primary,.btn-ghost{padding:12px 18px; font-size:13.5px;}
+
+    section{padding:34px 16px;}
+    .section-head h2{font-size:22px;}
+    .grid{grid-template-columns:repeat(2,1fr); gap:12px;}
+    .cw-list{grid-template-columns:1fr 1fr; gap:12px;}
+
+    .catalog-head{padding:30px 16px 0;}
+    .catalog-head h1{font-size:32px;}
+    .catalog-toolbar{padding:18px 16px; gap:10px;}
+    .toolbar-left{gap:8px; width:100%;}
+    .sort-select{flex:1;}
+    .active-filters{padding:0 16px 10px;}
+    .result-count{width:100%;}
+
+    footer{padding:28px 16px;}
+    .footer-inner{flex-direction:column; align-items:flex-start; gap:14px;}
+
+    .overlay{padding:12px;}
+    #auth-modal .modal{padding:26px 20px 22px;}
+    #filter-modal .modal{padding:22px 18px;}
+  }
+
+  @media (max-width:400px){
+    .grid{grid-template-columns:1fr 1fr; gap:10px;}
+    .cw-list{grid-template-columns:1fr;}
+    h1.title{font-size:32px;}
   }
 </style>
 
@@ -1154,7 +1215,16 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       <div class="auth-sub">Войдите, чтобы продолжить просмотр и синхронизировать список избранного.</div>
       <form onsubmit="handleAuthSubmit(event, 'login'); return false">
         <div class="field"><label>Email или имя пользователя</label><input type="text" placeholder="you@example.com" autocomplete="username" required></div>
-        <div class="field"><label>Пароль</label><input type="password" placeholder="••••••••" autocomplete="current-password" required></div>
+        <div class="field">
+          <label>Пароль</label>
+          <div class="password-wrap">
+            <input type="password" placeholder="••••••••" autocomplete="current-password" required>
+            <button type="button" class="toggle-password" onclick="togglePasswordVisibility(this)" aria-label="Показать пароль">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M2 2l20 20"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a13.16 13.16 0 0 1-2.67 3.35"/><path d="M6.61 6.61A13.53 13.53 0 0 0 1 11s4 7 11 7a9.26 9.26 0 0 0 4.39-1.06"/></svg>
+            </button>
+          </div>
+        </div>
         <button type="submit" class="auth-submit">Войти в аккаунт</button>
       </form>
       <div class="auth-switch">Нет аккаунта? <button onclick="switchAuthTab('register')">Зарегистрироваться</button></div>
@@ -1166,7 +1236,16 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       <form onsubmit="handleAuthSubmit(event, 'register'); return false">
         <div class="field"><label>Имя</label><input type="text" placeholder="Как к вам обращаться" autocomplete="name" required></div>
         <div class="field"><label>Email</label><input type="email" placeholder="you@example.com" autocomplete="email" required></div>
-        <div class="field"><label>Пароль</label><input type="password" placeholder="Минимум 8 символов" autocomplete="new-password" required></div>
+        <div class="field">
+          <label>Пароль</label>
+          <div class="password-wrap">
+            <input type="password" placeholder="Минимум 8 символов" autocomplete="new-password" required>
+            <button type="button" class="toggle-password" onclick="togglePasswordVisibility(this)" aria-label="Показать пароль">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M2 2l20 20"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a13.16 13.16 0 0 1-2.67 3.35"/><path d="M6.61 6.61A13.53 13.53 0 0 0 1 11s4 7 11 7a9.26 9.26 0 0 0 4.39-1.06"/></svg>
+            </button>
+          </div>
+        </div>
         <button type="submit" class="auth-submit">Создать аккаунт</button>
       </form>
       <div class="auth-switch">Уже есть аккаунт? <button onclick="switchAuthTab('login')">Войти</button></div>
@@ -1528,6 +1607,16 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       `;
       chip.onclick = openProfileModal;
     }
+  }
+
+  function togglePasswordVisibility(btn){
+    const input = btn.parentElement.querySelector('input');
+    if(!input) return;
+    const toText = input.type === 'password';
+    input.type = toText ? 'text' : 'password';
+    btn.querySelector('.icon-eye').style.display = toText ? 'none' : '';
+    btn.querySelector('.icon-eye-off').style.display = toText ? '' : 'none';
+    btn.setAttribute('aria-label', toText ? 'Скрыть пароль' : 'Показать пароль');
   }
 
   function openAuthModal(tab){
@@ -2924,9 +3013,33 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     box.innerHTML=(data||[]).map(p=>`
       <div class="k10-user">
         <div><strong>${esc(p.username||p.name||'Без ника')}</strong><br><small>${esc(p.id||'')}</small></div>
-        <div><button class="anime-action" onclick="k10GrantXP('${esc(p.id)}')">+ XP</button></div>
+        <div>
+          <button class="anime-action" onclick="k10GrantXP('${esc(p.id)}')">+ XP</button>
+          <button class="anime-action k19-danger" onclick="k10BanUser('${esc(p.id)}','${esc(p.username||p.name||'этого пользователя')}')">🚫 Забанить</button>
+        </div>
       </div>`).join('')||'<small>Пользователей пока нет.</small>';
   }
+  window.k10BanUser=async function(id,label){
+    if(!confirm(`Удалить аккаунт «${label}»? Это действие необратимо: пропадут профиль, комментарии, оценки, прогресс просмотра и т.д.`))return;
+    if(typeof showToast==='function')showToast('Удаляем аккаунт…');
+    try{
+      const {data:{session}}=await sb.auth.getSession();
+      if(!session){showToast('Сессия истекла, войдите заново');return;}
+      const {data,error}=await sb.functions.invoke('admin-delete-user',{
+        body:{user_id:id},
+        headers:{Authorization:`Bearer ${session.access_token}`}
+      });
+      if(error || data?.error){
+        showToast('Ошибка: '+(data?.error||error.message));
+        return;
+      }
+      showToast('Аккаунт удалён ✓');
+      loadUsers();
+    }catch(e){
+      console.error('k10BanUser:',e);
+      showToast('Не удалось удалить аккаунт');
+    }
+  };
   window.k10GrantXP=async function(id){
     const amount=Number(prompt('Сколько XP добавить?', '50'));
     if(!Number.isFinite(amount)||!amount)return;
