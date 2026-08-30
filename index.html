@@ -60,7 +60,9 @@
   }
 
   *{box-sizing:border-box; margin:0; padding:0;}
+  html{height:100%;}
   body{
+    min-height:100%; display:flex; flex-direction:column;
     background:
       radial-gradient(ellipse 900px 500px at 15% -10%, rgba(139,92,246,0.22), transparent 60%),
       radial-gradient(ellipse 700px 500px at 100% 10%, rgba(214,139,255,0.14), transparent 55%),
@@ -70,6 +72,8 @@
     transition: background 0.5s ease, color 0.5s ease;
     overflow-x:hidden;
   }
+  main{flex:1 0 auto;}
+  footer{flex-shrink:0;}
   html[data-theme="light"] body{
     background:
       radial-gradient(ellipse 900px 500px at 15% -10%, rgba(124,58,237,0.10), transparent 60%),
@@ -308,7 +312,7 @@
   .active-filter-tag button{background:none; border:none; color:inherit; cursor:pointer; font-size:14px; line-height:1;}
 
   /* footer */
-  footer{border-top:1px solid var(--line); padding:40px 32px; margin-top:20px;}
+  footer{border-top:1px solid var(--line); padding:48px 32px 40px; margin-top:40px;}
   .footer-inner{max-width:1240px; margin:0 auto; display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:16px;}
   footer p{font-size:12.5px; color:var(--text-faint);}
   .footer-links{display:flex; gap:22px; font-size:12.5px; font-weight:600; color:var(--text-dim);}
@@ -1799,15 +1803,30 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     const reader=new FileReader();
     reader.onload=()=>{
       const img=new Image();
-      img.onload=()=>{
+      img.onload=async()=>{
         const maxSide=700, scale=Math.min(1,maxSide/Math.max(img.width,img.height));
         const canvas=document.createElement('canvas');
         canvas.width=Math.max(1,Math.round(img.width*scale));
         canvas.height=Math.max(1,Math.round(img.height*scale));
         canvas.getContext('2d').drawImage(img,0,0,canvas.width,canvas.height);
-        selectedAvatar=canvas.toDataURL('image/jpeg',0.82);
-        renderProfileModal('settings');
-        showToast('Фото выбрано — теперь нажмите «Сохранить изменения»');
+        canvas.toBlob(async(blob)=>{
+          if(!blob){showToast('Не удалось обработать изображение');return;}
+          const user=currentUser();
+          if(!user){showToast('Войдите в аккаунт');return;}
+          showToast('Загружаем фото…');
+          try{
+            const path=`${user.id}/avatar_${Date.now()}.jpg`;
+            const {error:upErr}=await sb.storage.from('avatars').upload(path,blob,{contentType:'image/jpeg',upsert:true});
+            if(upErr)throw upErr;
+            const {data:pub}=sb.storage.from('avatars').getPublicUrl(path);
+            selectedAvatar=pub.publicUrl;
+            renderProfileModal('settings');
+            showToast('Фото загружено — теперь нажмите «Сохранить изменения»');
+          }catch(err){
+            console.error('uploadAvatar:',err);
+            showToast('Не удалось загрузить фото: '+(err?.message||'ошибка хранилища'));
+          }
+        },'image/jpeg',0.82);
       };
       img.onerror=()=>showToast('Не удалось открыть изображение');
       img.src=reader.result;
@@ -1950,6 +1969,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     empty.classList.toggle('hidden',users.length>0);
 
     users.forEach(u=>{
+      try{
       const div=document.createElement('div');
       const isMe=!!(me && String(me.id)===String(u.id));
       div.className='user-row'+(isMe?' k16-me':'');
@@ -1976,6 +1996,9 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         friendshipState(u.id)
           .then(st=>actions.innerHTML=renderFriendAction(st,u))
           .catch(err=>console.error('friend state',u.id,err));
+      }
+      }catch(rowErr){
+        console.error('renderUsers row failed for',u.id,rowErr);
       }
     });
   }
