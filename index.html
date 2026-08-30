@@ -361,6 +361,12 @@
   }
   .toggle-password:hover{color:var(--text);}
   .toggle-password svg{width:17px; height:17px;}
+  .forgot-password-link{
+    display:block; margin:9px 0 0 auto; background:none; border:none; cursor:pointer;
+    color:var(--violet-2); font-size:12px; font-weight:700; padding:0;
+  }
+  .forgot-password-link:hover{text-decoration:underline;}
+  .settings-divider{border-top:1px solid var(--line); margin:22px 0 18px;}
   .auth-submit{
     width:100%; background:linear-gradient(120deg,var(--violet),var(--magenta)); color:#fff; font-weight:700;
     font-size:14px; padding:13px; border-radius:9px; border:none; cursor:pointer; margin-top:6px; box-shadow:var(--shadow-glow);
@@ -1228,10 +1234,39 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
               <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M2 2l20 20"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a13.16 13.16 0 0 1-2.67 3.35"/><path d="M6.61 6.61A13.53 13.53 0 0 0 1 11s4 7 11 7a9.26 9.26 0 0 0 4.39-1.06"/></svg>
             </button>
           </div>
+          <button type="button" class="forgot-password-link" onclick="openForgotPassword()">Забыли пароль?</button>
         </div>
         <button type="submit" class="auth-submit">Войти в аккаунт</button>
       </form>
       <div class="auth-switch">Нет аккаунта? <button onclick="switchAuthTab('register')">Зарегистрироваться</button></div>
+    </div>
+
+    <div id="form-forgot" class="hidden">
+      <div class="auth-title">Восстановление пароля</div>
+      <div class="auth-sub">Введите email или имя пользователя — пришлём ссылку для сброса пароля на почту.</div>
+      <form onsubmit="submitForgotPassword(event); return false">
+        <div class="field"><label>Email или имя пользователя</label><input id="forgot-login-input" type="text" placeholder="you@example.com" required></div>
+        <button type="submit" class="auth-submit">Отправить ссылку</button>
+      </form>
+      <div class="auth-switch"><button onclick="switchAuthTab('login')">← Назад ко входу</button></div>
+    </div>
+
+    <div id="form-reset" class="hidden">
+      <div class="auth-title">Новый пароль</div>
+      <div class="auth-sub">Придумайте новый пароль для входа.</div>
+      <form onsubmit="submitNewPassword(event); return false">
+        <div class="field">
+          <label>Новый пароль</label>
+          <div class="password-wrap">
+            <input id="reset-password-input" type="password" placeholder="Минимум 8 символов" autocomplete="new-password" required>
+            <button type="button" class="toggle-password" onclick="togglePasswordVisibility(this)" aria-label="Показать пароль">
+              <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M2 2l20 20"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a13.16 13.16 0 0 1-2.67 3.35"/><path d="M6.61 6.61A13.53 13.53 0 0 0 1 11s4 7 11 7a9.26 9.26 0 0 0 4.39-1.06"/></svg>
+            </button>
+          </div>
+        </div>
+        <button type="submit" class="auth-submit">Сохранить новый пароль</button>
+      </form>
     </div>
 
     <div id="form-register" class="hidden">
@@ -1629,11 +1664,72 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   }
   function closeAuthModal(){ document.getElementById('auth-modal').classList.add('hidden'); }
   function switchAuthTab(tab){
+    const tabs=document.querySelector('.auth-tabs');
+    const isMainTab = tab==='login' || tab==='register';
+    if(tabs) tabs.classList.toggle('hidden', !isMainTab);
     document.getElementById('tab-login').classList.toggle('active', tab==='login');
     document.getElementById('tab-register').classList.toggle('active', tab==='register');
     document.getElementById('form-login').classList.toggle('hidden', tab!=='login');
     document.getElementById('form-register').classList.toggle('hidden', tab!=='register');
+    document.getElementById('form-forgot').classList.toggle('hidden', tab!=='forgot');
+    document.getElementById('form-reset').classList.toggle('hidden', tab!=='reset');
   }
+
+  function openForgotPassword(){
+    switchAuthTab('forgot');
+    const input=document.getElementById('forgot-login-input');
+    if(input) input.value='';
+  }
+
+  async function submitForgotPassword(e){
+    e.preventDefault();
+    const raw=document.getElementById('forgot-login-input').value.trim();
+    if(!raw){showToast('Введите email или имя пользователя');return false;}
+    let email=raw.toLowerCase();
+    if(!raw.includes('@')){
+      const {data:resolvedEmail,error:lookupError}=await sb.rpc('get_email_by_username',{p_username:raw});
+      if(lookupError || !resolvedEmail){
+        showToast('Пользователь с таким именем не найден');
+        return false;
+      }
+      email=resolvedEmail.toLowerCase();
+    }
+    const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:window.location.origin+window.location.pathname});
+    if(error){
+      console.error('resetPasswordForEmail:',error);
+      showToast('Не удалось отправить письмо: '+error.message);
+      return false;
+    }
+    showToast('Если такой аккаунт есть, письмо со ссылкой отправлено на почту');
+    switchAuthTab('login');
+    return false;
+  }
+
+  async function submitNewPassword(e){
+    e.preventDefault();
+    const password=document.getElementById('reset-password-input').value;
+    if(password.length<8){showToast('Пароль должен содержать минимум 8 символов');return false;}
+    const {error}=await sb.auth.updateUser({password});
+    if(error){
+      console.error('updateUser password:',error);
+      showToast('Не удалось сохранить пароль: '+error.message);
+      return false;
+    }
+    showToast('Пароль изменён ✓');
+    closeAuthModal();
+    refreshAuthUI();
+    return false;
+  }
+
+  // When the user opens the site via a password-reset email link, Supabase
+  // establishes a temporary recovery session and fires this event — show
+  // the "set new password" form instead of the normal login form.
+  sb.auth.onAuthStateChange((event)=>{
+    if(event==='PASSWORD_RECOVERY'){
+      document.getElementById('auth-modal').classList.remove('hidden');
+      switchAuthTab('reset');
+    }
+  });
 
   async function handleAuthSubmit(e, type){
     e.preventDefault();
@@ -1759,6 +1855,19 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
             </div>
           </div>
           <button type="button" class="auth-submit profile-save-btn" id="profile-save-btn" onclick="saveProfileSettings()">Сохранить изменения</button>
+
+          <div class="settings-divider"></div>
+          <div class="field">
+            <label>Сменить пароль</label>
+            <div class="password-wrap">
+              <input id="set-new-password" type="password" placeholder="Новый пароль, минимум 8 символов" autocomplete="new-password">
+              <button type="button" class="toggle-password" onclick="togglePasswordVisibility(this)" aria-label="Показать пароль">
+                <svg class="icon-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7Z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="icon-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:none"><path d="M2 2l20 20"/><path d="M10.6 10.6a2 2 0 0 0 2.8 2.8"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 7 11 7a13.16 13.16 0 0 1-2.67 3.35"/><path d="M6.61 6.61A13.53 13.53 0 0 0 1 11s4 7 11 7a9.26 9.26 0 0 0 4.39-1.06"/></svg>
+              </button>
+            </div>
+          </div>
+          <button type="button" class="btn-ghost" id="change-password-btn" onclick="changeOwnPassword()">Изменить пароль</button>
         </div>`;
     }else{
       const found=lists.find(x=>x[0]===tab)||lists[0];
@@ -1835,6 +1944,25 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     reader.readAsDataURL(file);
     e.target.value='';
   }
+  async function changeOwnPassword(){
+    const input=document.getElementById('set-new-password');
+    const password=input?.value||'';
+    if(password.length<8){showToast('Пароль должен содержать минимум 8 символов');return;}
+    const btn=document.getElementById('change-password-btn');
+    if(btn){btn.disabled=true;btn.textContent='Сохраняем...';}
+    try{
+      const {error}=await sb.auth.updateUser({password});
+      if(error)throw error;
+      showToast('Пароль изменён ✓');
+      if(input)input.value='';
+    }catch(err){
+      console.error('changeOwnPassword:',err);
+      showToast('Не удалось изменить пароль: '+(err?.message||'ошибка'));
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent='Изменить пароль';}
+    }
+  }
+
   async function saveProfileSettings(){
     const user=currentUser(); if(!user)return;
     const btn=document.getElementById('profile-save-btn');
