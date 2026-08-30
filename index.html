@@ -689,11 +689,22 @@ html[data-theme="mono"] .episode-list button.active-episode{color:#000}
 .watch-episodes-box{margin-top:24px;margin-bottom:24px;padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
 .watch-episodes-box .episode-list{max-height:220px;overflow-y:auto}
 .comments-box{margin-top:22px}
-.reviews-box{margin-top:24px;padding:22px 24px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}
-.reviews-box>strong{font-size:17px}
 .similar-section{margin-top:36px}
 .similar-head{margin-bottom:18px}
 .similar-head h2{font-family:'Bebas Neue',sans-serif;font-size:24px;letter-spacing:1px}
+.anime-tabs{display:flex;gap:28px;margin-top:34px;border-bottom:1px solid var(--line);}
+.anime-tab{
+  background:none;border:none;cursor:pointer;font-family:inherit;font-weight:700;font-size:15px;
+  color:var(--text-faint);padding:0 0 14px;position:relative;transition:color .2s;
+}
+.anime-tab:hover{color:var(--text);}
+.anime-tab.active{color:var(--text);}
+.anime-tab.active::after{
+  content:'';position:absolute;left:0;right:0;bottom:-1px;height:2px;
+  background:linear-gradient(90deg,var(--violet),var(--magenta));border-radius:2px;
+}
+.anime-tab-pane{padding-top:26px}
+.anime-tab-pane .comments-box{margin-top:0}
 .comment-form{display:flex;gap:10px;margin-top:10px;align-items:flex-start}
 .comment-form textarea{
   flex:1;min-height:64px;resize:vertical;
@@ -2983,37 +2994,47 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
             <span class="chip">${esc(item.status)}</span>
             ${tags}
           </div>
-          <p class="anime-detail-desc">${esc(item.description || 'Подробное описание этого аниме скоро появится в KUROSHI.')}</p>
-
           <div class="anime-actions">
             <button class="anime-action" onclick="openEpisode(1)">▶ Смотреть</button>
             <button class="anime-action" onclick="toggleLibrary(${catalogRef().indexOf(item)},'favorites')">♥ Любимое</button>
             <button class="anime-action" onclick="toggleLibrary(${catalogRef().indexOf(item)},'planned')">＋ В планах</button>
           </div>
+        </div>
+      </div>
 
-          <div class="rating-box">
-            <strong>Твоя оценка: <span id="my-rating">—</span></strong>
-            <div class="rating-buttons">
-              ${Array.from({length:10},(_,i)=>`<button onclick="rateActiveAnime(${i+1})" data-rate="${i+1}">${i+1}</button>`).join('')}
-            </div>
+      <div class="anime-tabs" id="anime-tabs">
+        <button class="anime-tab active" data-atab="about" onclick="switchAnimeTab('about')">О тайтле</button>
+        <button class="anime-tab" data-atab="comments" onclick="switchAnimeTab('comments')">Комментарии</button>
+      </div>
+
+      <div class="anime-tab-pane" id="anime-tab-about">
+        <p class="anime-detail-desc">${esc(item.description || 'Подробное описание этого аниме скоро появится в KUROSHI.')}</p>
+
+        <div class="rating-box">
+          <strong>Твоя оценка: <span id="my-rating">—</span></strong>
+          <div class="rating-buttons">
+            ${Array.from({length:10},(_,i)=>`<button onclick="rateActiveAnime(${i+1})" data-rate="${i+1}">${i+1}</button>`).join('')}
           </div>
+        </div>
 
-          <div class="episodes-box">
-            <strong>Серии</strong>
-            <div class="episode-list">
-              ${Array.from({length:total},(_,i)=>`<button id="ep-${i+1}" onclick="openEpisode(${i+1})">${i+1}</button>`).join('')}
-            </div>
+        <div class="episodes-box">
+          <strong>Серии</strong>
+          <div class="episode-list">
+            ${Array.from({length:total},(_,i)=>`<button id="ep-${i+1}" onclick="openEpisode(${i+1})">${i+1}</button>`).join('')}
           </div>
         </div>
       </div>
-      <div class="comments-box reviews-box">
-        <strong>Отзывы</strong>
-        <div class="comment-form">
-          <textarea id="review-input" maxlength="2000" placeholder="Поделись впечатлением об этом аниме..."></textarea>
-          <button class="anime-action" onclick="postActiveReview()">Отправить</button>
+
+      <div class="anime-tab-pane hidden" id="anime-tab-comments">
+        <div class="comments-box">
+          <div class="comment-form">
+            <textarea id="review-input" maxlength="2000" placeholder="Поделись впечатлением об этом аниме..."></textarea>
+            <button class="anime-action" onclick="postActiveReview()">Отправить</button>
+          </div>
+          <div id="review-list" class="comment-list"><small>Загрузка...</small></div>
         </div>
-        <div id="review-list" class="comment-list"><small>Загрузка...</small></div>
       </div>
+
       <div class="similar-section" id="similar-section">
         <div class="similar-head"><h2>Похожие тайтлы</h2></div>
         <div class="grid" id="similar-grid"></div>
@@ -3033,6 +3054,12 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         renderComments(reviews,'review-list');
       }
     } catch(e){ console.error(e); }
+  };
+
+  window.switchAnimeTab = function(tab){
+    document.querySelectorAll('#anime-tabs .anime-tab').forEach(b=>b.classList.toggle('active', b.dataset.atab===tab));
+    document.getElementById('anime-tab-about')?.classList.toggle('hidden', tab!=='about');
+    document.getElementById('anime-tab-comments')?.classList.toggle('hidden', tab!=='comments');
   };
 
   window.postActiveReview = async function(){
