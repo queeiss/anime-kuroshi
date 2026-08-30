@@ -723,7 +723,7 @@
 
     const btn=document.createElement('button');
     btn.className='k-admin-entry';
-    btn.innerHTML='<span>🛠️ Админ-панель</span><span>Управление KUROSHI →</span>';
+    btn.innerHTML='<span>Админ-панель</span><span>Управление KUROSHI →</span>';
     btn.onclick=()=>window.openAdmin && window.openAdmin();
     box.appendChild(btn);
   }
@@ -1336,10 +1336,10 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     <p style="color:var(--text-faint);font-size:12px;margin-bottom:18px">Управление каталогом, сериями и новостями.</p>
     <div id="admin-status"></div>
 <div class="k10-admin-tabs">
-<button data-k10-tab="anime" onclick="k10Tab('anime')">🎬 Аниме</button>
-<button data-k10-tab="episodes" onclick="k10Tab('episodes')">📺 Серии</button>
-<button data-k10-tab="news" onclick="k10Tab('news')">📰 Новости</button>
-<button data-k10-tab="users" onclick="k10Tab('users')">👥 Пользователи</button>
+<button data-k10-tab="anime" onclick="k10Tab('anime')">Аниме</button>
+<button data-k10-tab="episodes" onclick="k10Tab('episodes')">Серии</button>
+<button data-k10-tab="news" onclick="k10Tab('news')">Новости</button>
+<button data-k10-tab="users" onclick="k10Tab('users')">Пользователи</button>
 </div>
 <div id="k10-anime" class="k10-panel active"></div>
 <div id="k10-episodes" class="k10-panel"></div>
@@ -1367,7 +1367,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   <div id="k24-list" class="k24-list"></div>
 </div>
 <div class="admin-card">
-        <h3>🎬 Аниме</h3>
+        <h3>Аниме</h3>
         <input id="admin-anime-id" placeholder="ID, например midnight-blade">
         <input id="admin-anime-title" placeholder="Название">
         <input id="admin-anime-alt-title" placeholder="Альтернативное название на английском">
@@ -1396,7 +1396,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 <button class="btn-ghost k19-seed-btn" type="button" onclick="adminSeedCatalog()">Загрузить текущий каталог в базу</button>
       </div>
       <div class="admin-card">
-        <h3>📺 Серия</h3>
+        <h3>Серия</h3>
         <input id="admin-ep-anime" placeholder="ID аниме">
         <input id="admin-ep-number" type="number" placeholder="Номер серии">
         <input id="admin-ep-title" placeholder="Название серии">
@@ -1404,14 +1404,14 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         <div class="admin-row"><button class="btn-primary" onclick="adminSaveEpisode()">Добавить серию</button></div><div id="admin-episode-list" class="admin-list"></div>
       </div>
       <div class="admin-card">
-        <h3>📰 Новость</h3>
+        <h3>Новость</h3>
         <input id="admin-news-title" placeholder="Заголовок">
         <input id="admin-news-image" placeholder="URL изображения">
         <textarea id="admin-news-body" placeholder="Текст новости"></textarea>
         <div class="admin-row"><button class="btn-primary" onclick="adminSaveNews()">Опубликовать</button></div><div id="admin-news-list" class="admin-list"></div>
       </div>
       <div class="admin-card">
-        <h3>🔔 Уведомление пользователю</h3>
+        <h3>Уведомление пользователю</h3>
         <input id="admin-notify-user" placeholder="UUID пользователя">
         <input id="admin-notify-title" placeholder="Заголовок">
         <input id="admin-notify-body" placeholder="Текст">
@@ -2472,7 +2472,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       if (!ready()) return;
       try {
         await window.KuroshiV3.saveProgress(anime, episode, totalEpisodes);
-        toast('Прогресс сохранён ☁️');
+        toast('Прогресс сохранён ');
       } catch (e) { console.error(e); toast('Не удалось сохранить прогресс'); }
     },
 
@@ -2480,7 +2480,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       if (!ready()) return;
       try {
         await window.KuroshiV3.rate(anime, value);
-        toast('Оценка сохранена ⭐');
+        toast('Оценка сохранена ');
       } catch (e) { console.error(e); toast(e.message || 'Не удалось сохранить оценку'); }
     },
 
@@ -2488,7 +2488,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       if (!ready()) return;
       try {
         await window.KuroshiV3.addComment(anime, text);
-        toast('Комментарий опубликован 💬');
+        toast('Комментарий опубликован ');
       } catch (e) { console.error(e); toast(e.message || 'Не удалось добавить комментарий'); }
     },
 
@@ -2625,7 +2625,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       await window.KuroshiV3.rate(activeAnime,value);
       document.getElementById('my-rating').textContent=value+'/10';
       document.querySelectorAll('.rating-buttons button').forEach(b=>b.classList.toggle('active',Number(b.dataset.rate)===value));
-      if(typeof showToast==='function')showToast('Оценка сохранена ⭐');
+      if(typeof showToast==='function')showToast('Оценка сохранена ');
     }catch(e){if(typeof showToast==='function')showToast(e.message||'Войдите в аккаунт');}
   };
 
@@ -2637,7 +2637,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       input.value='';
       const comments=await window.KuroshiV3.comments(activeAnime);
       renderComments(comments);
-      if(typeof showToast==='function')showToast('Комментарий опубликован 💬');
+      if(typeof showToast==='function')showToast('Комментарий опубликован ');
     }catch(e){if(typeof showToast==='function')showToast(e.message||'Войдите в аккаунт');}
   };
 
@@ -2656,7 +2656,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   window.likeComment=async function(id){
     try{
       await window.KuroshiV3.toggleCommentLike(id);
-      if(typeof showToast==='function')showToast('Готово ❤️');
+      if(typeof showToast==='function')showToast('Готово ');
     }catch(e){if(typeof showToast==='function')showToast(e.message||'Войдите в аккаунт');}
   };
 
@@ -2820,7 +2820,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
     const btn=document.createElement('button');
     btn.className='profile-tab k-admin-btn';
     btn.dataset.adminButton='1';
-    btn.textContent='🛠 Админ-панель';
+    btn.textContent='Админ-панель';
     btn.onclick=window.openAdmin;
     tabs.appendChild(btn);
   }
@@ -3006,18 +3006,20 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   async function loadUsers(){
     const box=$('k10-users-list'); if(!box)return;
     box.innerHTML='<small>Загрузка...</small>';
-    /* auth.users intentionally cannot be read through the browser.
-       Use public.profiles for the user management list. */
+    const {data:{user:me}}=await sb.auth.getUser();
     const {data,error}=await sb.from('profiles').select('*').order('created_at',{ascending:false}).limit(100);
     if(error){box.innerHTML='<small>Не удалось загрузить профили.</small>';return}
-    box.innerHTML=(data||[]).map(p=>`
+    box.innerHTML=(data||[]).map(p=>{
+      const isMe=me && String(p.id)===String(me.id);
+      return `
       <div class="k10-user">
-        <div><strong>${esc(p.username||p.name||'Без ника')}</strong><br><small>${esc(p.id||'')}</small></div>
+        <div><strong>${esc(p.username||p.name||'Без ника')}</strong>${isMe?' <small style="color:var(--violet-2)">(это вы)</small>':''}<br><small>${esc(p.id||'')}</small></div>
         <div>
           <button class="anime-action" onclick="k10GrantXP('${esc(p.id)}')">+ XP</button>
-          <button class="anime-action k19-danger" onclick="k10BanUser('${esc(p.id)}','${esc(p.username||p.name||'этого пользователя')}')">🚫 Забанить</button>
+          ${isMe?'':`<button class="anime-action k19-danger" onclick="k10BanUser('${esc(p.id)}','${esc(p.username||p.name||'этого пользователя')}')">Забанить</button>`}
         </div>
-      </div>`).join('')||'<small>Пользователей пока нет.</small>';
+      </div>`;
+    }).join('')||'<small>Пользователей пока нет.</small>';
   }
   window.k10BanUser=async function(id,label){
     if(!confirm(`Удалить аккаунт «${label}»? Это действие необратимо: пропадут профиль, комментарии, оценки, прогресс просмотра и т.д.`))return;
@@ -3088,10 +3090,10 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         <div id="admin-status"></div>
 
         <div class="k10-admin-tabs">
-          <button data-k10-tab="anime" onclick="k10Tab('anime')">🎬 Аниме</button>
-          <button data-k10-tab="episodes" onclick="k10Tab('episodes')">📺 Серии</button>
-          <button data-k10-tab="news" onclick="k10Tab('news')">📰 Новости</button>
-          <button data-k10-tab="users" onclick="k10Tab('users')">👥 Пользователи</button>
+          <button data-k10-tab="anime" onclick="k10Tab('anime')">Аниме</button>
+          <button data-k10-tab="episodes" onclick="k10Tab('episodes')">Серии</button>
+          <button data-k10-tab="news" onclick="k10Tab('news')">Новости</button>
+          <button data-k10-tab="users" onclick="k10Tab('users')">Пользователи</button>
         </div>
 
         <div id="k10-anime" class="k10-panel active"></div>
@@ -3103,7 +3105,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
         <div class="admin-grid" style="margin-top:18px">
           <div class="admin-card">
-            <h3>🎬 Аниме</h3>
+            <h3>Аниме</h3>
             <input id="admin-anime-id" class="field-input" placeholder="ID, например midnight-blade">
             <input id="admin-anime-title" class="field-input" placeholder="Название">
             <input id="admin-anime-alt-title" class="field-input" placeholder="Альтернативное название на английском">
@@ -3133,7 +3135,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
           </div>
 
           <div class="admin-card">
-            <h3>📺 Серия</h3>
+            <h3>Серия</h3>
             <input id="admin-ep-anime" class="field-input" placeholder="ID аниме">
             <input id="admin-ep-number" class="field-input" type="number" placeholder="Номер серии">
             <input id="admin-ep-title" class="field-input" placeholder="Название серии">
@@ -3143,7 +3145,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
           </div>
 
           <div class="admin-card">
-            <h3>📰 Новость</h3>
+            <h3>Новость</h3>
             <input id="admin-news-title" class="field-input" placeholder="Заголовок">
             <input id="admin-news-image" class="field-input" placeholder="URL изображения">
             <textarea id="admin-news-body" class="field-input" style="min-height:110px" placeholder="Текст новости"></textarea>
@@ -3152,7 +3154,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
           </div>
 
           <div class="admin-card">
-            <h3>🔔 Уведомление</h3>
+            <h3>Уведомление</h3>
             <input id="admin-notify-user" class="field-input" placeholder="UUID пользователя">
             <input id="admin-notify-title" class="field-input" placeholder="Заголовок">
             <input id="admin-notify-body" class="field-input" placeholder="Текст">
@@ -5407,7 +5409,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
             <h2>${esc(u.name)}</h2>
             <p>${u.level ? 'Уровень '+u.level+' · ' : ''}${u.xp} XP · Зарегистрирован ${formatDate(u.createdAt)}</p>
             <div class="xp-wrap"><div class="xp-bar"><i style="width:${xpInfo.pct}%"></i></div><div class="xp-text">Уровень ${xpInfo.level} · ${xpInfo.current} / ${xpInfo.needed} XP до следующего</div></div>
-            <div class="k-friends-actions">${renderFriendAction(state,u)}<button class="k-friend-btn" onclick="openFriendRequests();event.stopPropagation()">👥 Мои друзья</button></div>
+            <div class="k-friends-actions">${renderFriendAction(state,u)}<button class="k-friend-btn" onclick="openUserFriendsList('${esc(u.id)}','${esc(u.name)}');event.stopPropagation()">Друзья</button></div>
           </div>
         </div>
         <div class="profile-tabs">
@@ -5418,7 +5420,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         <div class="k-friend-summary">
           <div class="k-friend-stat"><strong>${u.level}</strong><span>уровень</span></div>
           <div class="k-friend-stat"><strong>${u.xp}</strong><span>XP</span></div>
-          <div class="k-friend-stat"><strong>👥</strong><span>социальный профиль</span></div>
+          <div class="k-friend-stat"><strong>✓</strong><span>социальный профиль</span></div>
         </div>
         <div id="k-user-extra" class="library-grid"></div>`;
       // Try to load extended profile details from the profiles table. The list RPC intentionally exposes only public basics.
@@ -5453,6 +5455,25 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       box.querySelector('#k-user-extra').innerHTML=`<div style="grid-column:1/-1"><div class="profile-tabs">${labels.map(([k,l],i)=>`<button class="profile-tab ${i===0?'active':''}" onclick="document.getElementById('k-user-library-grid').innerHTML=window.__kLib('${k}')">${l} (${(lib[k]||[]).length})</button>`).join('')}</div><div id="k-user-library-grid" class="library-grid">${renderItems('watching')}</div></div>`;
       window.__kLib=k=>renderItems(k);
     }catch(e){console.error(e);toast('Не удалось загрузить библиотеку');}
+  }
+
+  async function openUserFriendsList(id,name){
+    const me=await getMe();
+    if(!me){openAuthModal('login');return;}
+    const modal=document.getElementById('profile-modal');if(!modal)return;
+    const content=modal.querySelector('.profile-content');
+    content.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-faint)">Загрузка друзей…</div>';
+    modal.classList.remove('hidden');
+    try{
+      const {data:friendUsers,error}=await sb.rpc('get_user_friends',{target_id:id});
+      if(error)throw error;
+      const list=friendUsers||[];
+      content.innerHTML=`
+        <div class="profile-head"><div><div class="profile-title"><h2>Друзья: ${esc(name||'пользователь')}</h2><p>${list.length} ${list.length===1?'друг':'друзей'}</p></div></div></div>
+        <div class="k-friends-actions"><button class="k-friend-btn" onclick="openUserProfile('${esc(id)}')">← Назад в профиль</button></div>
+        <div class="k-friend-list">${list.length?list.map(u=>`<div class="k-friend-row" onclick="openUserProfile('${esc(u.id)}')"><div class="mini">${avatarHtml(u)}</div><div class="meta"><strong>${esc(u.name||'Пользователь')}</strong><span>LVL ${userLevel(Number(u.xp)||0)} · ${Number(u.xp)||0} XP</span></div><span style="color:var(--text-faint)">›</span></div>`).join(''):`<div class="k-friends-empty">У этого пользователя пока нет друзей.</div>`}</div>`;
+      modal.classList.add('k-other-profile');
+    }catch(e){console.error('openUserFriendsList',e);toast('Не удалось загрузить список друзей');}
   }
 
   async function openFriendRequests(){
@@ -5529,6 +5550,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
   window.cancelFriendRequest=cancelFriendRequest;
   window.openUserProfile=openUserProfile;
   window.openUserLibrary=openUserLibrary;
+  window.openUserFriendsList=openUserFriendsList;
   window.openFriendRequests=openFriendRequests;
   window.loadFriendAlerts=loadFriendAlerts;
 
