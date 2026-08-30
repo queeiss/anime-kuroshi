@@ -687,6 +687,16 @@
 .episode-list button.watched{opacity:.65}
 .episode-list button.active-episode{background:linear-gradient(120deg,var(--violet),var(--magenta));border-color:transparent;color:#fff}
 html[data-theme="mono"] .episode-list button.active-episode{color:#000}
+.episodes-count{font-weight:400;color:var(--text-faint);font-size:12px}
+.episode-toolbar{display:flex;flex-wrap:wrap;gap:10px;margin:10px 0 14px;align-items:center}
+.episode-toolbar .sort-select{flex:1;min-width:110px}
+.episode-jump{display:flex;gap:8px}
+.episode-jump input{
+  width:88px;background:var(--surface-2);border:1px solid rgba(255,255,255,.14);border-radius:9px;
+  padding:9px 10px;color:var(--text);font:inherit;outline:none;
+}
+.episode-jump input:focus{border-color:var(--violet)}
+.episode-jump .anime-action{padding:9px 14px;white-space:nowrap}
 .watch-episodes-box{margin-top:24px;margin-bottom:24px;padding:18px 20px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
 .watch-comments-link{width:100%;justify-content:center;margin-bottom:32px}
 .watch-episodes-box .episode-list{max-height:220px;overflow-y:auto}
@@ -2986,6 +2996,66 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
 
   function esc(v){return String(v ?? '').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]));}
 
+  // For anime with a huge episode count (long-running shonen etc.), render
+  // episodes in chunks of 50 with a range picker + jump-to-episode input,
+  // instead of one giant unscrollable wall of buttons.
+  const EPISODES_PER_PAGE=50;
+  function episodeRanges(total){
+    const ranges=[];
+    for(let start=1;start<=total;start+=EPISODES_PER_PAGE){
+      ranges.push([start,Math.min(start+EPISODES_PER_PAGE-1,total)]);
+    }
+    return ranges;
+  }
+  function buildEpisodeBox(total,activeEp,idPrefix,heading,extraClass){
+    const boxClass='episodes-box'+(extraClass?(' '+extraClass):'');
+    if(total<=EPISODES_PER_PAGE){
+      return `<div class="${boxClass}">
+        <strong>${heading}</strong>
+        <div class="episode-list" id="${idPrefix}-list">
+          ${Array.from({length:total},(_,i)=>`<button id="${idPrefix}-${i+1}" class="${i+1===activeEp?'active-episode':''}" onclick="openEpisode(${i+1})">${i+1}</button>`).join('')}
+        </div>
+      </div>`;
+    }
+    const ranges=episodeRanges(total);
+    const activeRangeIdx=Math.max(0,ranges.findIndex(([s,e])=>activeEp>=s&&activeEp<=e));
+    return `<div class="${boxClass}">
+      <strong>${heading} <span class="episodes-count">(${total})</span></strong>
+      <div class="episode-toolbar">
+        <select class="sort-select" id="${idPrefix}-range" onchange="renderEpisodeRange('${idPrefix}',${total},Number(this.value))">
+          ${ranges.map(([s,e],i)=>`<option value="${i}" ${i===activeRangeIdx?'selected':''}>${s}–${e}</option>`).join('')}
+        </select>
+        <div class="episode-jump">
+          <input type="number" id="${idPrefix}-jump-input" min="1" max="${total}" placeholder="№ серии">
+          <button class="anime-action" onclick="jumpToEpisode('${idPrefix}',${total},document.getElementById('${idPrefix}-jump-input').value)">Перейти</button>
+        </div>
+      </div>
+      <div class="episode-list" id="${idPrefix}-list"></div>
+    </div>`;
+  }
+  window.renderEpisodeRange=function(idPrefix,total,rangeIdx,activeEp){
+    const ranges=episodeRanges(total);
+    const [start,end]=ranges[rangeIdx]||ranges[0];
+    const list=document.getElementById(idPrefix+'-list');
+    if(!list)return;
+    let html='';
+    for(let i=start;i<=end;i++){
+      html+=`<button id="${idPrefix}-${i}" class="${i===activeEp?'active-episode':''}" onclick="openEpisode(${i})">${i}</button>`;
+    }
+    list.innerHTML=html;
+  };
+  window.jumpToEpisode=function(idPrefix,total,value){
+    const ep=Math.min(total,Math.max(1,parseInt(value,10)||1));
+    const ranges=episodeRanges(total);
+    const rangeIdx=Math.max(0,ranges.findIndex(([s,e])=>ep>=s&&ep<=e));
+    const select=document.getElementById(idPrefix+'-range');
+    if(select) select.value=rangeIdx;
+    renderEpisodeRange(idPrefix,total,rangeIdx,idPrefix==='watch-ep'?activeEpisode:undefined);
+    const btn=document.getElementById(idPrefix+'-'+ep);
+    if(btn) btn.scrollIntoView({behavior:'smooth',block:'nearest'});
+  };
+
+
   window.openAnimeDetail = async function(index){
     const item = catalogRef()[index];
     if(!item) return;
@@ -3030,12 +3100,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
               <small class="rating-hint">Нажми на свою оценку ещё раз, чтобы убрать её</small>
             </div>
 
-            <div class="episodes-box">
-              <strong>Серии</strong>
-              <div class="episode-list">
-                ${Array.from({length:total},(_,i)=>`<button id="ep-${i+1}" onclick="openEpisode(${i+1})">${i+1}</button>`).join('')}
-              </div>
-            </div>
+            ${buildEpisodeBox(total,0,'ep','Серии')}
           </div>
 
           <div class="anime-tab-pane hidden" id="anime-tab-comments">
@@ -3056,6 +3121,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       </div>`;
 
     renderSimilarTitles(item);
+    if(total>EPISODES_PER_PAGE) renderEpisodeRange('ep',total,0);
 
     try {
       if(window.KuroshiV3){
@@ -3212,12 +3278,7 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
         <span>Серия ${ep} / ${total}</span>
         <button class="anime-action" ${ep>=total?'disabled':''} onclick="openEpisode(${ep+1})">Следующая ›</button>
       </div>
-      <div class="episodes-box watch-episodes-box">
-        <strong>Серии</strong>
-        <div class="episode-list" id="watch-episode-list">
-          ${Array.from({length:total},(_,i)=>`<button id="watch-ep-${i+1}" class="${i+1===ep?'active-episode':''}" onclick="openEpisode(${i+1})">${i+1}</button>`).join('')}
-        </div>
-      </div>
+      ${buildEpisodeBox(total,ep,'watch-ep','Серии','watch-episodes-box')}
       <div class="comments-box">
         <strong>Комментарии к серии ${ep}</strong>
         <div class="comment-form">
@@ -3228,6 +3289,11 @@ html[data-theme="mono"] .k16-me-badge{color:#000}
       </div>
       <button class="btn-ghost watch-comments-link" onclick="showPage('anime');switchAnimeTab('comments');window.scrollTo({top:0,behavior:'smooth'})">Обсудить аниме целиком в комментариях к тайтлу</button>`;
 
+    if(total>EPISODES_PER_PAGE){
+      const ranges=episodeRanges(total);
+      const rangeIdx=Math.max(0,ranges.findIndex(([s,e])=>ep>=s&&ep<=e));
+      renderEpisodeRange('watch-ep',total,rangeIdx,ep);
+    }
     const activeBtn=document.getElementById('watch-ep-'+ep);
     if(activeBtn) activeBtn.scrollIntoView({behavior:'smooth', inline:'center', block:'nearest'});
 
